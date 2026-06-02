@@ -1,0 +1,8 @@
+flask
+azure-storage-blob
+psycopg2-binary
+gunicorn
+Pillow
+piexif
+requests
+pytest
