@@ -1,625 +1,427 @@
 <!DOCTYPE html>
+<!--
+  index.html – Frontend der Foto-Galerie
+  Hosting: Netlify (statisches HTML, kein Server nötig)
+  Kommuniziert via REST API mit dem Azure App Service Backend
+  Features: Login, Galerie, Filter (Ort + Gerät), Upload, ZIP-Download, Lightbox
+-->
 <html lang="de">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Foto Galerie</title>
+  <!-- Google Fonts: Playfair Display (Titel) + Inter (Fliesstext) -->
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
+    /* ── CSS-Variablen: einheitliche Farben im ganzen Dokument ── */
     :root {
-      --black: #0a0a0a;
-      --white: #fafafa;
-      --gray-100: #f4f4f4;
-      --gray-200: #e8e8e8;
-      --gray-400: #999;
-      --gray-600: #555;
-      --accent: #1a1a2e;
-      --accent-light: #16213e;
-      --gold: #c9a84c;
-      --success: #2d6a4f;
-      --error: #c1121f;
+      --black: #0a0a0a; --white: #fafafa; --gray-100: #f4f4f4;
+      --gray-200: #e8e8e8; --gray-400: #999; --gray-600: #555;
+      --accent: #1a1a2e; --gold: #c9a84c; --success: #2d6a4f; --error: #c1121f;
     }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', sans-serif; background: var(--white); color: var(--black); min-height: 100vh; }
 
-    body {
-      font-family: 'Inter', sans-serif;
-      background: var(--white);
-      color: var(--black);
-      min-height: 100vh;
+    /* ── Login-Overlay: blockiert die App bis Zugangsdaten stimmen ── */
+    .login-overlay {
+      position: fixed; inset: 0; background: var(--accent);
+      display: flex; align-items: center; justify-content: center; z-index: 999;
     }
+    .login-overlay.hidden { display: none; } /* wird nach erfolgreichem Login ausgeblendet */
+    .login-box {
+      background: white; border-radius: 16px; padding: 48px 40px;
+      width: 100%; max-width: 380px; text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+    }
+    .login-box h1 { font-family: 'Playfair Display', serif; font-size: 28px; margin-bottom: 6px; }
+    .login-box p  { color: var(--gray-600); font-size: 14px; margin-bottom: 28px; }
+    .login-box input {
+      width: 100%; padding: 12px 16px; border: 1.5px solid var(--gray-200);
+      border-radius: 8px; font-size: 14px; margin-bottom: 14px;
+      font-family: 'Inter', sans-serif; transition: border-color 0.2s;
+    }
+    .login-box input:focus { outline: none; border-color: var(--accent); }
+    .login-btn {
+      width: 100%; padding: 13px; background: var(--accent); color: white;
+      border: none; border-radius: 8px; font-size: 15px; font-weight: 500;
+      cursor: pointer; font-family: 'Inter', sans-serif;
+    }
+    .login-error { color: var(--error); font-size: 13px; margin-top: 10px; display: none; }
 
-    /* ── HEADER ── */
+    /* ── Header: fixiert oben, zeigt App-Titel + Logout-Button ── */
     header {
-      background: var(--accent);
-      color: var(--white);
-      padding: 0 40px;
-      height: 72px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      position: sticky;
-      top: 0;
-      z-index: 100;
-      box-shadow: 0 2px 20px rgba(0,0,0,0.3);
+      background: var(--accent); color: white; padding: 0 40px; height: 72px;
+      display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 20px rgba(0,0,0,0.3);
+    }
+    .logo { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+    .logo span { color: var(--gold); }
+    .logout-btn {
+      background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.2);
+      padding: 7px 16px; border-radius: 6px; cursor: pointer; font-size: 13px;
+      font-family: 'Inter', sans-serif;
     }
 
-    .logo {
-      font-family: 'Playfair Display', serif;
-      font-size: 22px;
-      font-weight: 600;
-      letter-spacing: 0.5px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .logo span {
-      color: var(--gold);
-    }
-
-    .header-right {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    /* ── TOOLBAR ── */
+    /* ── Toolbar: Upload, Filter-Dropdowns, Download, Auswahl ── */
     .toolbar {
-      background: var(--white);
-      border-bottom: 1px solid var(--gray-200);
-      padding: 16px 40px;
-      display: flex;
-      gap: 12px;
-      align-items: center;
-      flex-wrap: wrap;
+      background: white; border-bottom: 1px solid var(--gray-200);
+      padding: 14px 40px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
     }
-
     .btn {
-      padding: 9px 20px;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      font-family: 'Inter', sans-serif;
-      font-size: 13px;
-      font-weight: 500;
-      transition: all 0.2s;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      white-space: nowrap;
+      padding: 9px 18px; border: none; border-radius: 6px; cursor: pointer;
+      font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500;
+      transition: all 0.2s; display: flex; align-items: center; gap: 5px; white-space: nowrap;
     }
-
-    .btn-primary {
-      background: var(--accent);
-      color: var(--white);
-    }
-
-    .btn-primary:hover { background: var(--accent-light); transform: translateY(-1px); }
-
-    .btn-secondary {
-      background: var(--gray-100);
-      color: var(--black);
-      border: 1px solid var(--gray-200);
-    }
-
-    .btn-secondary:hover { background: var(--gray-200); }
-
-    .btn-gold {
-      background: var(--gold);
-      color: var(--white);
-    }
-
-    .btn-gold:hover { opacity: 0.9; transform: translateY(-1px); }
-
-    .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
-
-    /* File Input */
+    .btn-primary  { background: var(--accent); color: white; }
+    .btn-secondary{ background: var(--gray-100); color: var(--black); border: 1px solid var(--gray-200); }
+    .btn-gold     { background: var(--gold); color: white; }
+    /* Verstecktes File-Input → wird via Label ausgelöst */
     .file-label {
-      padding: 9px 20px;
-      background: var(--gray-100);
-      border: 1px solid var(--gray-200);
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 13px;
-      font-weight: 500;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      transition: background 0.2s;
+      padding: 9px 18px; background: var(--gray-100); border: 1px solid var(--gray-200);
+      border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500;
+      display: flex; align-items: center; gap: 5px;
     }
-
-    .file-label:hover { background: var(--gray-200); }
     #fileInput { display: none; }
-
-    /* Select */
     select {
-      padding: 9px 14px;
-      border: 1px solid var(--gray-200);
-      border-radius: 6px;
-      font-family: 'Inter', sans-serif;
-      font-size: 13px;
-      background: var(--white);
-      color: var(--black);
-      cursor: pointer;
-      min-width: 180px;
+      padding: 9px 12px; border: 1px solid var(--gray-200); border-radius: 6px;
+      font-family: 'Inter', sans-serif; font-size: 13px; background: white; min-width: 160px;
     }
-
-    select:focus { outline: 2px solid var(--accent); }
-
-    /* Status */
-    #status {
-      font-size: 13px;
-      font-weight: 500;
-      padding: 6px 12px;
-      border-radius: 20px;
-      display: none;
-    }
-
+    /* Status-Meldungen (Erfolg / Fehler / Laden) */
+    #status { font-size: 13px; font-weight: 500; padding: 6px 12px; border-radius: 20px; display: none; }
     #status.success { background: #d8f3dc; color: var(--success); display: block; }
     #status.error   { background: #ffe0e0; color: var(--error);   display: block; }
     #status.loading { background: var(--gray-100); color: var(--gray-600); display: block; }
 
-    /* ── STATS BAR ── */
+    /* ── Stats-Bar: zeigt Anzahl Fotos, Orte, Geräte ── */
     .stats-bar {
-      padding: 12px 40px;
-      background: var(--gray-100);
+      padding: 10px 40px; background: var(--gray-100);
       border-bottom: 1px solid var(--gray-200);
-      display: flex;
-      gap: 24px;
-      align-items: center;
+      display: flex; gap: 20px; align-items: center; flex-wrap: wrap;
     }
+    .stat { font-size: 12px; color: var(--gray-600); }
+    .stat strong { color: var(--black); font-weight: 600; }
+    #selectedCount { margin-left: auto; font-size: 12px; color: var(--gray-600); }
 
-    .stat {
-      font-size: 12px;
-      color: var(--gray-600);
-      display: flex;
-      align-items: center;
-      gap: 5px;
-    }
+    /* ── Galerie: CSS Grid, passt sich automatisch der Breite an ── */
+    .gallery-wrapper { padding: 28px 40px; }
+    .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; }
 
-    .stat strong {
-      color: var(--black);
-      font-weight: 600;
-    }
-
-    #selectedCount {
-      margin-left: auto;
-      font-size: 12px;
-      color: var(--gray-600);
-    }
-
-    /* ── GALLERY ── */
-    .gallery-wrapper {
-      padding: 32px 40px;
-    }
-
-    .gallery {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-      gap: 20px;
-    }
-
-    /* ── PHOTO CARD ── */
+    /* ── Foto-Karte: zeigt Bild + Standort + Gerät ── */
     .photo-card {
-      border-radius: 10px;
-      overflow: hidden;
-      background: var(--white);
-      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-      transition: all 0.25s;
-      position: relative;
-      cursor: pointer;
+      border-radius: 10px; overflow: hidden; background: white;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08); transition: all 0.25s; position: relative;
     }
+    .photo-card:hover { transform: translateY(-4px); box-shadow: 0 8px 30px rgba(0,0,0,0.15); }
+    .photo-card.selected { outline: 3px solid var(--gold); outline-offset: 2px; } /* ausgewählt = Goldrahmen */
+    .photo-card img { width: 100%; height: 200px; object-fit: cover; display: block; cursor: zoom-in; }
+    .card-checkbox { position: absolute; top: 10px; left: 10px; width: 22px; height: 22px; accent-color: var(--gold); cursor: pointer; z-index: 2; }
+    .card-info { padding: 12px 14px; border-top: 1px solid var(--gray-100); }
+    .card-filename { font-size: 12px; color: var(--gray-600); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
+    .card-location { font-size: 13px; font-weight: 500; color: var(--accent); }
+    .card-location.no-location { color: var(--gray-400); font-style: italic; }
+    .card-device { font-size: 11px; color: var(--gray-400); margin-top: 3px; } /* Gerätename unter dem Foto */
 
-    .photo-card:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 8px 30px rgba(0,0,0,0.15);
-    }
-
-    .photo-card.selected {
-      outline: 3px solid var(--gold);
-      outline-offset: 2px;
-    }
-
-    .photo-card img {
-      width: 100%;
-      height: 200px;
-      object-fit: cover;
-      display: block;
-      background: var(--gray-100);
-    }
-
-    .card-checkbox {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      width: 22px;
-      height: 22px;
-      accent-color: var(--gold);
-      cursor: pointer;
-      z-index: 2;
-    }
-
-    .card-info {
-      padding: 12px 14px;
-      border-top: 1px solid var(--gray-100);
-    }
-
-    .card-filename {
-      font-size: 12px;
-      color: var(--gray-600);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      margin-bottom: 4px;
-    }
-
-    .card-location {
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--accent);
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-
-    .card-location.no-location {
-      color: var(--gray-400);
-      font-weight: 400;
-      font-style: italic;
-    }
-
-    /* ── EMPTY STATE ── */
-    .empty-state {
-      grid-column: 1 / -1;
-      text-align: center;
-      padding: 80px 20px;
-      color: var(--gray-400);
-    }
-
-    .empty-state .icon { font-size: 48px; margin-bottom: 16px; }
-
-    .empty-state h3 {
-      font-family: 'Playfair Display', serif;
-      font-size: 22px;
-      color: var(--gray-600);
-      margin-bottom: 8px;
-    }
-
-    .empty-state p { font-size: 14px; }
-
-    /* ── LOADING SPINNER ── */
-    .loading-grid {
-      grid-column: 1 / -1;
-      display: flex;
-      justify-content: center;
-      padding: 60px;
-    }
-
-    .spinner {
-      width: 36px;
-      height: 36px;
-      border: 3px solid var(--gray-200);
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-    }
-
+    /* ── Leerer Zustand + Lade-Spinner ── */
+    .empty-state { grid-column: 1/-1; text-align: center; padding: 80px 20px; color: var(--gray-400); }
+    .empty-state h3 { font-family: 'Playfair Display', serif; font-size: 22px; color: var(--gray-600); margin-bottom: 8px; }
+    .loading-grid { grid-column: 1/-1; display: flex; justify-content: center; padding: 60px; }
+    .spinner { width: 36px; height: 36px; border: 3px solid var(--gray-200); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* ── UPLOAD PROGRESS ── */
-    .upload-overlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(10,10,10,0.7);
-      z-index: 200;
-      align-items: center;
-      justify-content: center;
-    }
-
+    /* ── Upload-Overlay: Fortschrittsanzeige während dem Hochladen ── */
+    .upload-overlay { display: none; position: fixed; inset: 0; background: rgba(10,10,10,0.7); z-index: 200; align-items: center; justify-content: center; }
     .upload-overlay.active { display: flex; }
+    .upload-modal { background: white; border-radius: 12px; padding: 40px; text-align: center; min-width: 280px; }
+    .upload-modal h3 { font-family: 'Playfair Display', serif; font-size: 20px; margin-bottom: 8px; }
+    .progress-bar { height: 6px; background: var(--gray-200); border-radius: 3px; overflow: hidden; }
+    .progress-fill { height: 100%; background: var(--gold); border-radius: 3px; transition: width 0.3s; }
 
-    .upload-modal {
-      background: var(--white);
-      border-radius: 12px;
-      padding: 40px;
-      text-align: center;
-      min-width: 280px;
-    }
-
-    .upload-modal h3 {
-      font-family: 'Playfair Display', serif;
-      font-size: 20px;
-      margin-bottom: 8px;
-    }
-
-    .upload-modal p {
-      font-size: 13px;
-      color: var(--gray-600);
-      margin-bottom: 20px;
-    }
-
-    .progress-bar {
-      height: 6px;
-      background: var(--gray-200);
-      border-radius: 3px;
-      overflow: hidden;
-    }
-
-    .progress-fill {
-      height: 100%;
-      background: var(--gold);
-      border-radius: 3px;
-      transition: width 0.3s;
-    }
-
-    /* ── LIGHTBOX ── */
-    .lightbox {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.92);
-      z-index: 300;
-      align-items: center;
-      justify-content: center;
-      flex-direction: column;
-      gap: 16px;
-    }
-
+    /* ── Lightbox: Foto in Vollansicht mit Ort + Gerätinfos ── */
+    .lightbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 300; align-items: center; justify-content: center; flex-direction: column; gap: 16px; }
     .lightbox.active { display: flex; }
+    .lightbox img { max-width: 90vw; max-height: 80vh; object-fit: contain; border-radius: 4px; }
+    .lightbox-info { color: white; font-size: 14px; text-align: center; }
+    .lightbox-device { color: var(--gray-400); font-size: 12px; }
+    .lightbox-close { position: absolute; top: 20px; right: 24px; font-size: 28px; color: white; cursor: pointer; background: none; border: none; }
 
-    .lightbox img {
-      max-width: 90vw;
-      max-height: 80vh;
-      object-fit: contain;
-      border-radius: 4px;
-    }
-
-    .lightbox-info {
-      color: var(--white);
-      text-align: center;
-      font-size: 14px;
-    }
-
-    .lightbox-close {
-      position: absolute;
-      top: 20px;
-      right: 24px;
-      font-size: 28px;
-      color: var(--white);
-      cursor: pointer;
-      background: none;
-      border: none;
-      line-height: 1;
-    }
-
-    /* ── RESPONSIVE ── */
+    /* ── Responsive: kleinere Abstände auf Mobile ── */
     @media (max-width: 600px) {
-      header { padding: 0 16px; }
-      .toolbar { padding: 12px 16px; }
-      .gallery-wrapper { padding: 20px 16px; }
-      .stats-bar { padding: 10px 16px; }
+      header, .toolbar, .gallery-wrapper, .stats-bar { padding-left: 16px; padding-right: 16px; }
     }
   </style>
 </head>
 <body>
 
-<!-- HEADER -->
+<!-- ── LOGIN-OVERLAY: erscheint beim ersten Öffnen der Seite ─────────────── -->
+<div class="login-overlay" id="loginOverlay">
+  <div class="login-box">
+    <h1>📸 Foto<span style="color:var(--gold)">Galerie</span></h1>
+    <p>Bitte einloggen um fortzufahren</p>
+    <input type="text"     id="loginUser" placeholder="Benutzername" autocomplete="username">
+    <input type="password" id="loginPass" placeholder="Passwort"     autocomplete="current-password"
+           onkeydown="if(event.key==='Enter') doLogin()">
+    <button class="login-btn" onclick="doLogin()">Einloggen</button>
+    <div class="login-error" id="loginError">❌ Falscher Benutzername oder Passwort</div>
+  </div>
+</div>
+
+<!-- ── HEADER: Titel + Logout-Button ─────────────────────────────────────── -->
 <header>
   <div class="logo">📸 Foto<span>Galerie</span></div>
-  <div class="header-right">
-    <span style="font-size:12px;color:#aaa;">VICC.TA1A.PA</span>
+  <div style="display:flex;align-items:center;gap:12px">
+    <span style="font-size:12px;color:#aaa">VICC.TA1A.PA</span>
+    <button class="logout-btn" onclick="doLogout()">Ausloggen</button>
   </div>
 </header>
 
-<!-- TOOLBAR -->
+<!-- ── TOOLBAR: Aktionen (Upload, Filter, Download) ──────────────────────── -->
 <div class="toolbar">
-  <label class="file-label" for="fileInput">
-    📁 Fotos wählen
-  </label>
+  <!-- File-Input über Label ausgelöst (input bleibt versteckt) -->
+  <label class="file-label" for="fileInput">📁 Fotos wählen</label>
   <input type="file" id="fileInput" accept="image/*" multiple onchange="onFileSelect()">
 
-  <button class="btn btn-primary" onclick="uploadPhotos()" id="uploadBtn" disabled>
-    ⬆️ Hochladen
-  </button>
+  <!-- Upload-Button: inaktiv bis Fotos ausgewählt wurden -->
+  <button class="btn btn-primary" onclick="uploadPhotos()" id="uploadBtn" disabled>⬆️ Hochladen</button>
 
-  <select id="filterSelect" onchange="applyFilter()">
+  <!-- Filter nach Ort (Dropdown wird dynamisch aus API befüllt) -->
+  <select id="filterLocation" onchange="applyFilter()">
     <option value="">🌍 Alle Orte</option>
   </select>
 
-  <button class="btn btn-gold" onclick="downloadSelected()" id="downloadBtn">
-    ⬇️ ZIP Download
-  </button>
+  <!-- Filter nach Gerät (Dropdown wird dynamisch aus API befüllt) -->
+  <select id="filterDevice" onchange="applyFilter()">
+    <option value="">📱 Alle Geräte</option>
+  </select>
 
-  <button class="btn btn-secondary" onclick="selectAll()">
-    ☑️ Alle
-  </button>
-
-  <button class="btn btn-secondary" onclick="deselectAll()">
-    ✕ Keine
-  </button>
-
+  <button class="btn btn-gold"      onclick="downloadSelected()">⬇️ ZIP Download</button>
+  <button class="btn btn-secondary" onclick="selectAll()">☑️ Alle</button>
+  <button class="btn btn-secondary" onclick="deselectAll()">✕ Keine</button>
   <span id="status"></span>
 </div>
 
-<!-- STATS BAR -->
+<!-- ── STATS-BAR: Übersicht Anzahl Fotos / Orte / Geräte ──────────────────── -->
 <div class="stats-bar">
   <div class="stat">Fotos: <strong id="photoCount">–</strong></div>
   <div class="stat">Orte: <strong id="locationCount">–</strong></div>
+  <div class="stat">Geräte: <strong id="deviceCount">–</strong></div>
   <div id="selectedCount">0 ausgewählt</div>
 </div>
 
-<!-- GALLERY -->
+<!-- ── GALERIE: Foto-Karten werden hier per JavaScript eingefügt ──────────── -->
 <div class="gallery-wrapper">
   <div class="gallery" id="gallery">
     <div class="loading-grid"><div class="spinner"></div></div>
   </div>
 </div>
 
-<!-- UPLOAD OVERLAY -->
+<!-- ── UPLOAD-OVERLAY: Fortschrittsbalken während Upload ────────────────── -->
 <div class="upload-overlay" id="uploadOverlay">
   <div class="upload-modal">
     <h3>Wird hochgeladen...</h3>
     <p id="uploadProgress">0 von 0 Fotos</p>
-    <div class="progress-bar">
-      <div class="progress-fill" id="progressFill" style="width:0%"></div>
-    </div>
+    <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
   </div>
 </div>
 
-<!-- LIGHTBOX -->
+<!-- ── LIGHTBOX: Foto-Vollansicht mit Ort + Gerätinfos ───────────────────── -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
-  <button class="lightbox-close" onclick="closeLightbox()">✕</button>
+  <button class="lightbox-close">✕</button>
   <img id="lightboxImg" src="" alt="">
-  <div class="lightbox-info" id="lightboxInfo"></div>
+  <div class="lightbox-info"   id="lightboxInfo"></div>
+  <div class="lightbox-device" id="lightboxDevice"></div>
 </div>
 
 <script>
-  // ── KONFIGURATION ──────────────────────────────────────────────
+  // ── API-Basis-URL: zeigt auf den Azure App Service ──────────────────────────
   const API = "https://app-fotogalerie-prod-f2cha4hehrgpefbt.germanywestcentral-01.azurewebsites.net";
 
-  // ── STATE ──────────────────────────────────────────────────────
-  let allPhotos  = [];
-  let allLocations = [];
-  let selectedFiles = [];
+  // Globale Variable: Base64-kodierter Authorization-Header (HTTP Basic Auth)
+  let authHeader = "";
 
-  // ── INIT ───────────────────────────────────────────────────────
-  async function init() {
-    await Promise.all([loadLocations(), loadPhotos()]);
+  // ── LOGIN: sendet Credentials an API zur Überprüfung ──────────────────────
+  function doLogin() {
+    const u = document.getElementById("loginUser").value.trim();
+    const p = document.getElementById("loginPass").value;
+    if (!u || !p) return;
+
+    // HTTP Basic Auth: "username:password" → Base64 kodieren
+    authHeader = "Basic " + btoa(u + ":" + p);
+
+    // Test-Request: 401 = falsch, 200 = korrekt
+    fetch(`${API}/api/photos`, { headers: { "Authorization": authHeader } })
+      .then(r => {
+        if (r.status === 401) {
+          document.getElementById("loginError").style.display = "block";
+          authHeader = ""; // ungültige Credentials zurücksetzen
+        } else {
+          document.getElementById("loginOverlay").classList.add("hidden");
+          document.getElementById("loginError").style.display = "none";
+          init(); // App laden
+        }
+      })
+      .catch(() => {
+        document.getElementById("loginError").style.display = "block";
+        authHeader = "";
+      });
   }
 
-  // ── STATUS ─────────────────────────────────────────────────────
+  // ── LOGOUT: Auth-Header löschen + Login-Overlay wieder zeigen ─────────────
+  function doLogout() {
+    authHeader = "";
+    document.getElementById("loginUser").value = "";
+    document.getElementById("loginPass").value = "";
+    document.getElementById("loginOverlay").classList.remove("hidden");
+    document.getElementById("gallery").innerHTML = '<div class="loading-grid"><div class="spinner"></div></div>';
+  }
+
+  // ── Hilfsfunktion: fetch() immer mit Authorization-Header ─────────────────
+  function authFetch(url, options = {}) {
+    return fetch(url, {
+      ...options,
+      headers: { ...options.headers, "Authorization": authHeader }
+    });
+  }
+
+  // ── INIT: lädt Locations, Devices und Fotos parallel ──────────────────────
+  async function init() {
+    await Promise.all([loadLocations(), loadDevices(), loadPhotos()]);
+  }
+
+  // ── STATUS: zeigt Erfolgs-/Fehlermeldungen in der Toolbar ─────────────────
   function setStatus(msg, type = "loading") {
     const el = document.getElementById("status");
-    el.textContent = msg;
-    el.className = type;
+    el.textContent = msg; el.className = type;
+    // Meldung nach 4 Sekunden automatisch ausblenden
     if (type !== "loading") setTimeout(() => { el.className = ""; el.textContent = ""; }, 4000);
   }
 
-  // ── LOAD LOCATIONS ─────────────────────────────────────────────
+  // ── Orte laden: befüllt das Location-Filter-Dropdown ──────────────────────
   async function loadLocations() {
     try {
-      const res = await fetch(`${API}/api/locations`);
-      allLocations = await res.json();
-      const sel = document.getElementById("filterSelect");
-      // Reset
+      const locs = await (await authFetch(`${API}/api/locations`)).json();
+      const sel = document.getElementById("filterLocation");
       sel.innerHTML = '<option value="">🌍 Alle Orte</option>';
-      // Länder
-      const countries = [...new Set(allLocations.map(l => l.country))].filter(Boolean);
+
+      // Länder als Optgroup
+      const countries = [...new Set(locs.map(l => l.country))].filter(Boolean);
       if (countries.length) {
-        const g1 = document.createElement("optgroup");
-        g1.label = "Nach Land";
+        const g = document.createElement("optgroup"); g.label = "Nach Land";
         countries.forEach(c => {
           const o = document.createElement("option");
-          o.value = `country:${c}`; o.text = `🌍 ${c}`;
-          g1.appendChild(o);
+          o.value = `country:${c}`; o.text = `🌍 ${c}`; g.appendChild(o);
         });
-        sel.appendChild(g1);
+        sel.appendChild(g);
       }
-      // Städte
-      const cities = allLocations.filter(l => l.city);
+      // Städte als Optgroup
+      const cities = locs.filter(l => l.city);
       if (cities.length) {
-        const g2 = document.createElement("optgroup");
-        g2.label = "Nach Stadt";
+        const g = document.createElement("optgroup"); g.label = "Nach Stadt";
         cities.forEach(l => {
           const o = document.createElement("option");
-          o.value = `city:${l.city}`; o.text = `📍 ${l.city} (${l.country})`;
-          g2.appendChild(o);
+          o.value = `city:${l.city}`; o.text = `📍 ${l.city} (${l.country})`; g.appendChild(o);
         });
-        sel.appendChild(g2);
+        sel.appendChild(g);
       }
-      document.getElementById("locationCount").textContent = allLocations.length;
-    } catch(e) {
-      console.error("Locations:", e);
-    }
+      document.getElementById("locationCount").textContent = locs.length;
+    } catch(e) { console.error("Locations:", e); }
   }
 
-  // ── LOAD PHOTOS ────────────────────────────────────────────────
-  async function loadPhotos(city = "", country = "") {
+  // ── Geräte laden: befüllt das Device-Filter-Dropdown ──────────────────────
+  async function loadDevices() {
+    try {
+      const devs = await (await authFetch(`${API}/api/devices`)).json();
+      const sel = document.getElementById("filterDevice");
+      sel.innerHTML = '<option value="">📱 Alle Geräte</option>';
+      devs.forEach(d => {
+        const o = document.createElement("option");
+        o.value = d.device; o.text = `📱 ${d.device}`; sel.appendChild(o);
+      });
+      document.getElementById("deviceCount").textContent = devs.length;
+    } catch(e) { console.error("Devices:", e); }
+  }
+
+  // ── Fotos laden: optional mit Filter (Ort / Land / Gerät) ─────────────────
+  async function loadPhotos(city="", country="", device="") {
     document.getElementById("gallery").innerHTML = '<div class="loading-grid"><div class="spinner"></div></div>';
     try {
+      // Query-Parameter dynamisch zusammenbauen
       let url = `${API}/api/photos`;
-      if (city)    url += `?city=${encodeURIComponent(city)}`;
-      else if (country) url += `?country=${encodeURIComponent(country)}`;
-      const res = await fetch(url);
-      allPhotos = await res.json();
-      document.getElementById("photoCount").textContent = allPhotos.length;
-      renderGallery(allPhotos);
+      const params = [];
+      if (city)    params.push(`city=${encodeURIComponent(city)}`);
+      if (country) params.push(`country=${encodeURIComponent(country)}`);
+      if (device)  params.push(`device=${encodeURIComponent(device)}`);
+      if (params.length) url += "?" + params.join("&");
+
+      const photos = await (await authFetch(url)).json();
+      document.getElementById("photoCount").textContent = photos.length;
+      renderGallery(photos);
     } catch(e) {
       document.getElementById("gallery").innerHTML = `
         <div class="empty-state">
-          <div class="icon">⚠️</div>
+          <div style="font-size:48px;margin-bottom:16px">⚠️</div>
           <h3>Verbindungsfehler</h3>
           <p>API nicht erreichbar. Prüfe ob der App Service läuft.</p>
         </div>`;
     }
   }
 
-  // ── RENDER GALLERY ─────────────────────────────────────────────
+  // ── Galerie rendern: erstellt HTML-Karten für jedes Foto ──────────────────
   function renderGallery(photos) {
     const g = document.getElementById("gallery");
     if (!photos.length) {
-      g.innerHTML = `
-        <div class="empty-state">
-          <div class="icon">📷</div>
-          <h3>Noch keine Fotos</h3>
-          <p>Lade dein erstes Foto hoch!</p>
-        </div>`;
+      g.innerHTML = `<div class="empty-state"><div style="font-size:48px;margin-bottom:16px">📷</div><h3>Noch keine Fotos</h3><p>Lade dein erstes Foto hoch!</p></div>`;
       return;
     }
+    // Für jedes Foto eine Karte mit Checkbox, Bild, Ort und Gerät erstellen
     g.innerHTML = photos.map(p => `
-      <div class="photo-card" id="card-${p.id}" onclick="toggleSelect(event, ${p.id})">
+      <div class="photo-card" id="card-${p.id}" onclick="toggleSelect(event,${p.id})">
         <input type="checkbox" class="card-checkbox" data-id="${p.id}"
-               onclick="event.stopPropagation()" onchange="onCheckbox(${p.id}, this)">
+               onclick="event.stopPropagation()" onchange="onCheckbox(${p.id},this)">
         <img src="${p.url}" alt="${p.filename}" loading="lazy"
-             onclick="event.stopPropagation(); openLightbox('${p.url}', '${p.filename}', '${p.city || ''}', '${p.country || ''}')">
+             onclick="event.stopPropagation();openLightbox('${p.url}','${p.filename}','${p.city||''}','${p.country||''}','${p.device||''}')">
         <div class="card-info">
           <div class="card-filename">${p.filename}</div>
           ${p.city
             ? `<div class="card-location">📍 ${p.city}, ${p.country}</div>`
-            : `<div class="card-location no-location">Kein Standort</div>`}
+            : '<div class="card-location no-location">Kein Standort</div>'}
+          ${p.device ? `<div class="card-device">📱 ${p.device}</div>` : ''}
         </div>
       </div>`).join("");
     updateSelectedCount();
   }
 
-  // ── FILTER ─────────────────────────────────────────────────────
+  // ── Filter anwenden: liest beide Dropdowns und lädt gefilterte Fotos ──────
   function applyFilter() {
-    const v = document.getElementById("filterSelect").value;
-    if (!v)                    return loadPhotos();
-    if (v.startsWith("city:")) return loadPhotos(v.slice(5), "");
-    if (v.startsWith("country:")) return loadPhotos("", v.slice(8));
+    const loc = document.getElementById("filterLocation").value;
+    const dev = document.getElementById("filterDevice").value;
+    let city="", country="";
+    if (loc.startsWith("city:"))    city    = loc.slice(5);
+    if (loc.startsWith("country:")) country = loc.slice(8);
+    loadPhotos(city, country, dev);
   }
 
-  // ── FILE SELECT ────────────────────────────────────────────────
+  // ── Datei-Auswahl: aktiviert Upload-Button nach Auswahl ───────────────────
+  let selectedFiles = [];
   function onFileSelect() {
     selectedFiles = Array.from(document.getElementById("fileInput").files);
-    const btn = document.getElementById("uploadBtn");
-    btn.disabled = selectedFiles.length === 0;
-    if (selectedFiles.length > 0) {
-      setStatus(`${selectedFiles.length} Foto(s) bereit`, "loading");
-    }
+    document.getElementById("uploadBtn").disabled = selectedFiles.length === 0;
+    if (selectedFiles.length) setStatus(`${selectedFiles.length} Foto(s) bereit`, "loading");
   }
 
-  // ── UPLOAD ─────────────────────────────────────────────────────
+  // ── Upload: sendet Fotos einzeln an die API mit Fortschrittsbalken ─────────
   async function uploadPhotos() {
     if (!selectedFiles.length) return;
-    const overlay = document.getElementById("uploadOverlay");
+    const overlay      = document.getElementById("uploadOverlay");
     const progressText = document.getElementById("uploadProgress");
     const progressFill = document.getElementById("progressFill");
-    overlay.classList.add("active");
+    overlay.classList.add("active"); // Overlay einblenden
     let done = 0;
     for (const file of selectedFiles) {
-      progressText.textContent = `${done + 1} von ${selectedFiles.length} Fotos`;
-      progressFill.style.width = `${(done / selectedFiles.length) * 100}%`;
+      progressText.textContent = `${done+1} von ${selectedFiles.length} Fotos`;
+      progressFill.style.width = `${(done/selectedFiles.length)*100}%`;
       const fd = new FormData();
-      fd.append("photo", file);
-      try {
-        await fetch(`${API}/api/photos`, { method: "POST", body: fd });
-      } catch(e) {
-        console.error("Upload error:", e);
-      }
+      fd.append("photo", file); // Foto als Multipart-Form-Data
+      await authFetch(`${API}/api/photos`, { method: "POST", body: fd });
       done++;
     }
     progressFill.style.width = "100%";
@@ -628,88 +430,57 @@
     document.getElementById("uploadBtn").disabled = true;
     selectedFiles = [];
     setStatus(`✅ ${done} Foto(s) hochgeladen!`, "success");
-    await Promise.all([loadPhotos(), loadLocations()]);
+    // Galerie + Filter-Dropdowns neu laden
+    await Promise.all([loadPhotos(), loadLocations(), loadDevices()]);
   }
 
-  // ── SELECT ─────────────────────────────────────────────────────
+  // ── Auswahl-Funktionen: Checkbox-Status + Goldrahmen auf Karte ────────────
   function toggleSelect(event, id) {
     const cb = document.querySelector(`.card-checkbox[data-id="${id}"]`);
-    if (!cb) return;
-    cb.checked = !cb.checked;
-    onCheckbox(id, cb);
+    if (!cb) return; cb.checked = !cb.checked; onCheckbox(id, cb);
   }
-
   function onCheckbox(id, cb) {
     const card = document.getElementById(`card-${id}`);
     if (cb.checked) card.classList.add("selected");
-    else card.classList.remove("selected");
+    else            card.classList.remove("selected");
     updateSelectedCount();
   }
-
-  function selectAll() {
-    document.querySelectorAll(".card-checkbox").forEach(cb => {
-      cb.checked = true;
-      const card = document.getElementById(`card-${cb.dataset.id}`);
-      if (card) card.classList.add("selected");
-    });
-    updateSelectedCount();
-  }
-
-  function deselectAll() {
-    document.querySelectorAll(".card-checkbox").forEach(cb => {
-      cb.checked = false;
-      const card = document.getElementById(`card-${cb.dataset.id}`);
-      if (card) card.classList.remove("selected");
-    });
-    updateSelectedCount();
-  }
-
+  function selectAll()   { document.querySelectorAll(".card-checkbox").forEach(cb => { cb.checked=true;  document.getElementById(`card-${cb.dataset.id}`)?.classList.add("selected"); }); updateSelectedCount(); }
+  function deselectAll() { document.querySelectorAll(".card-checkbox").forEach(cb => { cb.checked=false; document.getElementById(`card-${cb.dataset.id}`)?.classList.remove("selected"); }); updateSelectedCount(); }
   function updateSelectedCount() {
-    const count = document.querySelectorAll(".card-checkbox:checked").length;
-    document.getElementById("selectedCount").textContent =
-      count > 0 ? `${count} ausgewählt` : "0 ausgewählt";
+    const n = document.querySelectorAll(".card-checkbox:checked").length;
+    document.getElementById("selectedCount").textContent = n > 0 ? `${n} ausgewählt` : "0 ausgewählt";
   }
 
-  // ── DOWNLOAD ───────────────────────────────────────────────────
+  // ── ZIP-Download: sendet ausgewählte IDs → API erstellt ZIP ───────────────
   async function downloadSelected() {
     const ids = [...document.querySelectorAll(".card-checkbox:checked")].map(c => +c.dataset.id);
-    if (!ids.length) { setStatus("Bitte zuerst Fotos auswählen", "error"); return; }
+    if (!ids.length) { setStatus("Bitte Fotos auswählen", "error"); return; }
     setStatus("⏳ ZIP wird erstellt...", "loading");
-    try {
-      const res = await fetch(`${API}/api/download`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids })
-      });
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      Object.assign(document.createElement("a"), { href: url, download: "fotos.zip" }).click();
-      URL.revokeObjectURL(url);
-      setStatus(`✅ ${ids.length} Foto(s) heruntergeladen`, "success");
-    } catch(e) {
-      setStatus("Fehler beim Download", "error");
-    }
+    const res  = await authFetch(`${API}/api/download`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids })
+    });
+    // Blob-URL erstellen und automatisch herunterladen
+    const blob = await res.blob();
+    Object.assign(document.createElement("a"),
+      { href: URL.createObjectURL(blob), download: "fotos.zip" }).click();
+    setStatus(`✅ ${ids.length} Foto(s) heruntergeladen`, "success");
   }
 
-  // ── LIGHTBOX ───────────────────────────────────────────────────
-  function openLightbox(url, filename, city, country) {
-    document.getElementById("lightboxImg").src = url;
-    document.getElementById("lightboxInfo").textContent =
-      city ? `📍 ${city}, ${country} — ${filename}` : filename;
+  // ── Lightbox: zeigt Foto gross mit Ort + Gerätinfos ───────────────────────
+  function openLightbox(url, filename, city, country, device) {
+    document.getElementById("lightboxImg").src    = url;
+    document.getElementById("lightboxInfo").textContent   = city ? `📍 ${city}, ${country} — ${filename}` : filename;
+    document.getElementById("lightboxDevice").textContent = device ? `📱 ${device}` : "";
     document.getElementById("lightbox").classList.add("active");
   }
-
   function closeLightbox() {
     document.getElementById("lightbox").classList.remove("active");
-    document.getElementById("lightboxImg").src = "";
   }
-
-  document.addEventListener("keydown", e => {
-    if (e.key === "Escape") closeLightbox();
-  });
-
-  // ── START ──────────────────────────────────────────────────────
-  init();
+  // ESC-Taste schliesst die Lightbox
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeLightbox(); });
 </script>
 </body>
 </html>

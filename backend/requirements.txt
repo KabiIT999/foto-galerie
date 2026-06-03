@@ -6,3 +6,4 @@ Pillow
 piexif
 requests
 pytest
+user-agents
