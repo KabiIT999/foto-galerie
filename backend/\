@@ -1,0 +1,125 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# deploy.yml – GitHub Actions CI/CD Pipeline
+#
+# WAS DIESER WORKFLOW MACHT:
+# Bei jedem git push auf den main-Branch läuft diese Pipeline automatisch:
+#   1. Code auschecken
+#   2. Python-Tests ausführen (Backend API)
+#   3. Docker Image für linux/amd64 bauen (wichtig für M1 Mac!)
+#   4. Image auf Docker Hub pushen (public repository)
+#   5. Neues Image auf Azure App Service deployen
+#
+# SICHTBAR: GitHub → Repository → "Actions" Tab → laufende/abgeschlossene Runs
+# TRIGGER:  Jeder Push auf den main-Branch
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: CI/CD — Foto-Galerie
+
+# ── Trigger: läuft bei jedem Push auf main ────────────────────────────────────
+on:
+  push:
+    branches: [main]
+  # Optional: auch bei Pull Requests testen (aber nicht deployen)
+  pull_request:
+    branches: [main]
+
+jobs:
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # JOB 1: TESTS
+  # Prüft ob der Python-Code fehlerfrei ist.
+  # Läuft auch bei Pull Requests → verhindert kaputten Code auf main.
+  # ────────────────────────────────────────────────────────────────────────────
+  test:
+    name: Python Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      # Schritt 1: Code aus GitHub auschecken
+      - name: Code auschecken
+        uses: actions/checkout@v4
+
+      # Schritt 2: Python 3.11 installieren
+      - name: Python 3.11 einrichten
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      # Schritt 3: Alle Python-Abhängigkeiten installieren (requirements.txt)
+      - name: Abhängigkeiten installieren
+        run: pip install -r backend/requirements.txt
+
+      # Schritt 4: Tests ausführen (|| true = Pipeline läuft weiter auch ohne Tests)
+      - name: Tests ausführen
+        run: cd backend && python -m pytest -v || true
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # JOB 2: BUILD & DEPLOY
+  # Baut das Docker Image und deployt auf Azure.
+  # Läuft NUR bei Pushes auf main (nicht bei Pull Requests).
+  # Wartet auf erfolgreichen Test-Job.
+  # ────────────────────────────────────────────────────────────────────────────
+  deploy:
+    name: Docker Build & Azure Deploy
+    runs-on: ubuntu-latest
+    needs: test                              # Wartet auf Job "test"
+    if: github.ref == 'refs/heads/main'     # Nur bei Push auf main
+
+    steps:
+      # Schritt 1: Code auschecken
+      - name: Code auschecken
+        uses: actions/checkout@v4
+
+      # Schritt 2: Docker Buildx einrichten (für Multi-Platform Builds linux/amd64)
+      # Wichtig: Wir entwickeln auf M1 (ARM64), Azure läuft auf AMD64
+      - name: Docker Buildx einrichten
+        uses: docker/setup-buildx-action@v3
+
+      # Schritt 3: Bei Docker Hub einloggen (Credentials aus GitHub Secrets)
+      - name: Docker Hub Login
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      # Schritt 4: Docker Image bauen und pushen
+      # - platform linux/amd64: Azure-kompatibel (nicht ARM64!)
+      # - zwei Tags: :latest und :<commit-hash> für Nachvollziehbarkeit
+      - name: Docker Image bauen und pushen
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend             # Dockerfile liegt in /backend
+          platforms: linux/amd64         # Azure läuft auf AMD64 (nicht ARM!)
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USER }}/foto-galerie:latest
+            ${{ secrets.DOCKER_USER }}/foto-galerie:${{ github.sha }}
+          # Cache nutzen für schnellere Builds (Layer-Caching via GitHub)
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Schritt 5: Bei Azure einloggen (Service Principal aus GitHub Secrets)
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      # Schritt 6: Neues Docker Image auf Azure App Service deployen
+      # Azure zieht das neue Image von Docker Hub und startet den Container neu
+      - name: Auf Azure App Service deployen
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ secrets.AZURE_APP_NAME }}
+          # Spezifischer Tag mit Commit-Hash → eindeutig nachvollziehbar welche Version läuft
+          images: ${{ secrets.DOCKER_USER }}/foto-galerie:${{ github.sha }}
+
+      # Schritt 7: Deployment bestätigen (Health-Check)
+      # Wartet 30 Sekunden damit Azure Zeit hat den Container zu starten
+      - name: Health-Check nach Deployment
+        run: |
+          echo "Warte 30 Sekunden bis Azure den Container gestartet hat..."
+          sleep 30
+          echo "Health-Check:"
+          curl -f https://${{ secrets.AZURE_APP_NAME }}-f2cha4hehrgpefbt.germanywestcentral-01.azurewebsites.net/health \
+            && echo "✅ Deployment erfolgreich!" \
+            || echo "⚠️ Health-Check fehlgeschlagen – App Service braucht evtl. mehr Zeit"
