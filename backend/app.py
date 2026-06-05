@@ -4,7 +4,7 @@
 # Logs: Azure Portal → app-fotogalerie-prod → Log stream
 # ─────────────────────────────────────────────────────────────────────────────
 
-from flask import Flask, jsonify, request, send_file
+from flask import Flask, jsonify, request, send_file, Response
 from azure.storage.blob import BlobServiceClient
 from PIL import Image
 from PIL.ExifTags import TAGS, GPSTAGS
@@ -13,8 +13,52 @@ import os, zipfile, io, logging, traceback
 import requests as req
 from functools import wraps
 from user_agents import parse as ua_parse   # pip install pyyaml ua-parser user-agents
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 app = Flask(__name__)
+
+# ── Rate Limiter ──────────────────────────────────────────────────────────────
+# Schützt die API vor zu vielen Anfragen von einer IP-Adresse.
+# Standard: 200 Anfragen/Tag, 50/Stunde, 10/Minute pro IP
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://",
+)
+
+# ── Bekannte Bot / KI-Crawler User-Agents blockieren ─────────────────────────
+# Diese Liste enthält Bots die Inhalte scrapen oder für KI-Training sammeln.
+BLOCKED_BOTS = [
+    # KI-Trainingscrawler
+    "gptbot", "chatgpt", "claude-web", "anthropic", "ccbot",
+    "cohere-ai", "google-extended", "amazonbot",
+    "bytespider", "petalbot", "applebot",
+    # SEO / allgemeine Crawler (für private App nicht erwünscht)
+    "semrushbot", "ahrefsbot", "dotbot", "mj12bot",
+    "blexbot", "seznambot", "yandexbot",
+]
+
+@app.before_request
+def block_bots():
+    """
+    Blockiert bekannte Bot-User-Agents vor jeder Anfrage.
+    Ausnahme: /health darf von Monitoring-Tools (curl, Azure) aufgerufen werden.
+    """
+    # Health-Endpoint bleibt offen für Azure-Monitoring
+    if request.path == "/health":
+        return None
+
+    raw_ua = request.headers.get("User-Agent", "").lower()
+    for bot in BLOCKED_BOTS:
+        if bot in raw_ua:
+            ip, client = get_client_info()
+            log.warning(f"[BLOCKED] Bot geblockt | Bot-Pattern: '{bot}' | {client}")
+            return jsonify({
+                "error": "Zugriff verweigert",
+                "detail": "Automatisierte Zugriffe sind nicht erlaubt."
+            }), 403
 
 # ── Logging-Konfiguration ─────────────────────────────────────────────────────
 logging.basicConfig(
@@ -207,9 +251,35 @@ def reverse_geocode(lat, lng):
         return "", ""
 
 
+# ── GET /robots.txt ───────────────────────────────────────────────────────────
+@app.route("/robots.txt", methods=["GET"])
+def robots_txt():
+    """
+    Teilt Web-Crawlern mit, dass sie diese App nicht indexieren sollen.
+    Wird von seriösen Crawlern (Google, Bing etc.) respektiert.
+    """
+    content = (
+        "User-agent: *\n"
+        "Disallow: /\n\n"
+        "# KI-Trainingscrawler explizit ausschliessen\n"
+        "User-agent: GPTBot\n"
+        "Disallow: /\n\n"
+        "User-agent: Claude-Web\n"
+        "Disallow: /\n\n"
+        "User-agent: CCBot\n"
+        "Disallow: /\n\n"
+        "User-agent: Google-Extended\n"
+        "Disallow: /\n\n"
+        "User-agent: AmazonBot\n"
+        "Disallow: /\n"
+    )
+    return Response(content, mimetype="text/plain")
+
+
 # ── GET /api/photos ───────────────────────────────────────────────────────────
 @app.route("/api/photos", methods=["GET"])
 @requires_auth
+@limiter.limit("30 per minute")
 def list_photos():
     city    = request.args.get("city")
     country = request.args.get("country")
@@ -288,6 +358,7 @@ def get_devices():
 # ── POST /api/photos ──────────────────────────────────────────────────────────
 @app.route("/api/photos", methods=["POST"])
 @requires_auth
+@limiter.limit("20 per hour")
 def upload_photo():
     file = request.files.get("photo")
     if not file:
@@ -348,6 +419,7 @@ def upload_photo():
 # ── POST /api/download ────────────────────────────────────────────────────────
 @app.route("/api/download", methods=["POST"])
 @requires_auth
+@limiter.limit("10 per hour")
 def download_photos():
     ids = request.json.get("ids", [])
     if not ids:

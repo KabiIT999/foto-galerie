@@ -7,3 +7,4 @@ piexif
 requests
 pytest
 user-agents
+Flask-Limiter
