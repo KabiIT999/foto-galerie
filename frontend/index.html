@@ -528,7 +528,7 @@
     <input type="password" id="loginPass" placeholder="Passwort"
            autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
     <button class="btn-login" onclick="doLogin()">Einloggen</button>
-    <div class="login-error" id="loginError">Falscher Benutzername oder Passwort</div>
+    <div class="login-error" id="loginError"></div>
   </div>
 </div>
 
@@ -765,10 +765,23 @@
     authHeader = "Basic " + btoa(u + ":" + p);
 
     // Benutzerinfo laden (inkl. Rolle)
-    fetch(`${API}/api/me`, { headers: { "Authorization": authHeader } })
+    // Timeout nach 8 Sekunden → App möglicherweise nicht erreichbar
+    const controller = new AbortController();
+    const timeout    = setTimeout(() => controller.abort(), 8000);
+
+    fetch(`${API}/api/me`, {
+      headers: { "Authorization": authHeader },
+      signal: controller.signal
+    })
       .then(async r => {
+        clearTimeout(timeout);
         if (r.status === 401) {
-          document.getElementById("loginError").style.display = "block";
+          // Falsches Passwort / Benutzername nicht vorhanden
+          showLoginError("Falscher Benutzername oder Passwort");
+          authHeader = "";
+        } else if (!r.ok) {
+          // Server antwortet, aber mit Fehler (z.B. 500)
+          showLoginError("Server-Fehler. Bitte später versuchen.");
           authHeader = "";
         } else {
           currentUser = await r.json();
@@ -778,10 +791,23 @@
           init();      // Daten laden
         }
       })
-      .catch(() => {
-        document.getElementById("loginError").style.display = "block";
+      .catch(err => {
+        clearTimeout(timeout);
         authHeader = "";
+        // Unterscheide zwischen Timeout (App down) und Netzwerkfehler
+        if (err.name === "AbortError") {
+          showLoginError("⚠️ WebApp nicht erreichbar. Bitte den IT kontaktieren.");
+        } else {
+          showLoginError("⚠️ Verbindung fehlgeschlagen. WebApp möglicherweise nicht aktiv.");
+        }
       });
+  }
+
+  /** Zeigt eine Fehlermeldung im Login-Formular an. */
+  function showLoginError(msg) {
+    const el = document.getElementById("loginError");
+    el.textContent   = msg;
+    el.style.display = "block";
   }
 
   /**
