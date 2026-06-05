@@ -105,7 +105,7 @@ jobs:
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ secrets.AZURE_APP_NAME }}
-          publish-profile: ${{ secrets.AZURE_PUBLISH_PROFILE }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
           # Spezifischer Tag mit Commit-Hash → eindeutig nachvollziehbar welche Version läuft
           images: ${{ secrets.DOCKER_USER }}/foto-galerie:${{ github.sha }}
 
