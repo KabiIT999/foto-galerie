@@ -98,18 +98,14 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Schritt 5: Bei Azure einloggen (Service Principal aus GitHub Secrets)
-      - name: Azure Login
-        uses: azure/login@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-      # Schritt 6: Neues Docker Image auf Azure App Service deployen
+      # Schritt 5: Neues Docker Image auf Azure App Service deployen
+      # Authentifizierung via Publish Profile (kein Service Principal nötig)
       # Azure zieht das neue Image von Docker Hub und startet den Container neu
       - name: Auf Azure App Service deployen
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ secrets.AZURE_APP_NAME }}
+          publish-profile: ${{ secrets.AZURE_PUBLISH_PROFILE }}
           # Spezifischer Tag mit Commit-Hash → eindeutig nachvollziehbar welche Version läuft
           images: ${{ secrets.DOCKER_USER }}/foto-galerie:${{ github.sha }}
 
