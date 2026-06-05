@@ -575,16 +575,17 @@
 <div class="toolbar" id="toolbar">
   <!-- Upload-Button: kombinierter Select+Upload (öffnet Datei-Picker → Auto-Upload) -->
   <!-- Nur für admin und user sichtbar, viewer sieht diesen Button nicht -->
-  <label class="btn-upload" id="uploadLabel">
+  <!-- for="fileInput" verbindet das Label mit dem versteckten Input → Klick öffnet Datei-Picker -->
+  <label class="btn-upload" id="uploadLabel" for="fileInput">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
       <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
     </svg>
     Fotos hochladen
   </label>
-  <!-- File-Input: versteckt, wird über das Label ausgelöst -->
-  <!-- multiple: mehrere Fotos gleichzeitig wählen erlaubt -->
-  <!-- onchange: startet Upload sofort nach der Auswahl -->
+  <!-- File-Input: versteckt, wird über das Label (for="fileInput") ausgelöst -->
+  <!-- multiple: mehrere Fotos gleichzeitig wählen erlaubt              -->
+  <!-- onchange: startet Upload sofort nach der Auswahl (kein zweiter Klick nötig) -->
   <input type="file" id="fileInput" accept="image/*" multiple onchange="autoUpload()">
 
   <div class="sep"></div>
@@ -822,6 +823,9 @@
     document.getElementById("loginPass").value = "";
     document.getElementById("loginOverlay").classList.remove("hidden");
     document.getElementById("gallery").innerHTML = '<div class="loading-grid"><div class="spinner"></div></div>';
+    // Benutzer-Tab beim Ausloggen wieder verstecken (wichtig bei Rollenwechsel)
+    document.getElementById("tabUsers").classList.add("hidden");
+    document.getElementById("uploadLabel").style.display = "";
     showGallery();  // zurück zur Galerie-Ansicht
   }
 
