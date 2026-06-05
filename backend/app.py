@@ -458,6 +458,45 @@ def download_photos():
         return jsonify(err), 500
 
 
+# ── GET /api/photos/<id>/image ────────────────────────────────────────────────
+@app.route("/api/photos/<int:photo_id>/image", methods=["GET"])
+@requires_auth
+@limiter.limit("500 per hour")
+def serve_photo(photo_id):
+    """
+    Proxies das Bild sicher aus Azure Blob Storage.
+    Da der Blob-Container privat ist, werden Bilder nur für
+    eingeloggte Benutzer über diesen Endpunkt ausgeliefert.
+    """
+    try:
+        conn = get_db()
+        cur  = conn.cursor()
+        cur.execute("SELECT filename FROM photos WHERE id = %s", (photo_id,))
+        row = cur.fetchone()
+        conn.close()
+        if not row:
+            return jsonify({"error": "Foto nicht gefunden"}), 404
+
+        filename   = row[0]
+        blob_svc   = BlobServiceClient.from_connection_string(CONN_STR)
+        blob_client = blob_svc.get_blob_client(container=CONTAINER, blob=filename)
+        data       = blob_client.download_blob().readall()
+
+        fn = filename.lower()
+        if   fn.endswith(".png"):  mime = "image/png"
+        elif fn.endswith(".gif"):  mime = "image/gif"
+        elif fn.endswith(".webp"): mime = "image/webp"
+        else:                      mime = "image/jpeg"
+
+        log_info("Bild serviert", f"id={photo_id} | {filename}")
+        response = send_file(io.BytesIO(data), mimetype=mime)
+        response.headers["Cache-Control"] = "private, max-age=3600"
+        return response
+    except Exception as e:
+        err = log_error("E009", f"serve_photo id={photo_id}", e)
+        return jsonify(err), 404
+
+
 # ── GET /health ───────────────────────────────────────────────────────────────
 @app.route("/health", methods=["GET"])
 def health():

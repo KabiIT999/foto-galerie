@@ -1,262 +1,457 @@
 <!DOCTYPE html>
 <!--
-  index.html – Frontend der Foto-Galerie
-  Hosting: Netlify (statisches HTML, kein Server nötig)
-  Kommuniziert via REST API mit dem Azure App Service Backend
-  Features: Login, Galerie, Filter (Ort + Gerät), Upload, ZIP-Download, Lightbox
+  index.html – KVPCinematic Portfolio
+  Hosting: Netlify (statisches HTML)
+  Backend: Azure App Service (Flask)
+  Bilder werden sicher über Backend-Proxy geladen (kein öffentlicher Blob-Zugriff nötig)
 -->
 <html lang="de">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Foto Galerie</title>
-  <!-- Google Fonts: Playfair Display (Titel) + Inter (Fliesstext) -->
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <title>KVPCinematic Portfolio</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
   <style>
-    /* ── CSS-Variablen: einheitliche Farben im ganzen Dokument ── */
     :root {
-      --black: #0a0a0a; --white: #fafafa; --gray-100: #f4f4f4;
-      --gray-200: #e8e8e8; --gray-400: #999; --gray-600: #555;
-      --accent: #1a1a2e; --gold: #c9a84c; --success: #2d6a4f; --error: #c1121f;
+      --bg:        #0d0d0d;
+      --surface:   #161616;
+      --surface2:  #1e1e1e;
+      --border:    #2a2a2a;
+      --white:     #f5f5f5;
+      --muted:     #888;
+      --gold:      #c9a84c;
+      --gold-dim:  #a8883c;
+      --success:   #2d6a4f;
+      --error:     #c1121f;
+      --radius:    10px;
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Inter', sans-serif; background: var(--white); color: var(--black); min-height: 100vh; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--white);
+      min-height: 100vh;
+    }
 
-    /* ── Login-Overlay: blockiert die App bis Zugangsdaten stimmen ── */
+    /* ── APERTURE ICON (SVG inline) ── */
+    .aperture-icon svg { display: block; }
+
+    /* ── LOGIN ── */
     .login-overlay {
-      position: fixed; inset: 0; background: var(--accent);
+      position: fixed; inset: 0;
+      background: radial-gradient(ellipse at 60% 40%, #1a1a2e 0%, #0d0d0d 70%);
       display: flex; align-items: center; justify-content: center; z-index: 999;
     }
-    .login-overlay.hidden { display: none; } /* wird nach erfolgreichem Login ausgeblendet */
+    .login-overlay.hidden { display: none; }
     .login-box {
-      background: white; border-radius: 16px; padding: 48px 40px;
-      width: 100%; max-width: 380px; text-align: center;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 52px 44px;
+      width: 100%; max-width: 400px;
+      text-align: center;
+      box-shadow: 0 32px 80px rgba(0,0,0,0.6);
     }
-    .login-box h1 { font-family: 'Playfair Display', serif; font-size: 28px; margin-bottom: 6px; }
-    .login-box p  { color: var(--gray-600); font-size: 14px; margin-bottom: 28px; }
+    .login-logo {
+      display: flex; align-items: center; justify-content: center; gap: 12px;
+      margin-bottom: 8px;
+    }
+    .login-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 26px; font-weight: 700; letter-spacing: -0.3px;
+    }
+    .login-title .gold  { color: var(--gold); }
+    .login-title .light { font-weight: 400; color: var(--muted); font-size: 20px; }
+    .login-sub {
+      color: var(--muted); font-size: 13px; margin-bottom: 32px; margin-top: 6px;
+      letter-spacing: 0.5px; text-transform: uppercase;
+    }
     .login-box input {
-      width: 100%; padding: 12px 16px; border: 1.5px solid var(--gray-200);
-      border-radius: 8px; font-size: 14px; margin-bottom: 14px;
-      font-family: 'Inter', sans-serif; transition: border-color 0.2s;
+      width: 100%; padding: 13px 16px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; font-size: 14px; margin-bottom: 12px;
+      font-family: 'Inter', sans-serif; color: var(--white);
+      transition: border-color 0.2s;
     }
-    .login-box input:focus { outline: none; border-color: var(--accent); }
+    .login-box input::placeholder { color: var(--muted); }
+    .login-box input:focus { outline: none; border-color: var(--gold); }
     .login-btn {
-      width: 100%; padding: 13px; background: var(--accent); color: white;
-      border: none; border-radius: 8px; font-size: 15px; font-weight: 500;
-      cursor: pointer; font-family: 'Inter', sans-serif;
+      width: 100%; padding: 14px;
+      background: var(--gold); color: #0d0d0d;
+      border: none; border-radius: 8px; font-size: 14px; font-weight: 600;
+      cursor: pointer; font-family: 'Inter', sans-serif; letter-spacing: 0.3px;
+      transition: background 0.2s;
     }
-    .login-error { color: var(--error); font-size: 13px; margin-top: 10px; display: none; }
+    .login-btn:hover { background: var(--gold-dim); }
+    .login-error { color: #ff6b6b; font-size: 13px; margin-top: 10px; display: none; }
 
-    /* ── Header: fixiert oben, zeigt App-Titel + Logout-Button ── */
+    /* ── HEADER ── */
     header {
-      background: var(--accent); color: white; padding: 0 40px; height: 72px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 40px; height: 68px;
       display: flex; align-items: center; justify-content: space-between;
-      position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 20px rgba(0,0,0,0.3);
+      position: sticky; top: 0; z-index: 100;
     }
-    .logo { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
-    .logo span { color: var(--gold); }
+    .logo {
+      display: flex; align-items: center; gap: 12px;
+      font-family: 'Playfair Display', serif; font-size: 20px; font-weight: 700;
+    }
+    .logo .kvp    { color: var(--white); }
+    .logo .cinema { color: var(--gold); }
+    .logo .port   { color: var(--muted); font-weight: 400; font-size: 16px; }
+    .header-right { display: flex; align-items: center; gap: 14px; }
+    .badge {
+      font-size: 10px; color: var(--muted); letter-spacing: 1.5px;
+      text-transform: uppercase; border: 1px solid var(--border);
+      padding: 4px 10px; border-radius: 4px;
+    }
     .logout-btn {
-      background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.2);
+      background: transparent; color: var(--muted); border: 1px solid var(--border);
       padding: 7px 16px; border-radius: 6px; cursor: pointer; font-size: 13px;
-      font-family: 'Inter', sans-serif;
+      font-family: 'Inter', sans-serif; transition: all 0.2s;
     }
+    .logout-btn:hover { color: var(--white); border-color: var(--muted); }
 
-    /* ── Toolbar: Upload, Filter-Dropdowns, Download, Auswahl ── */
+    /* ── TOOLBAR ── */
     .toolbar {
-      background: white; border-bottom: 1px solid var(--gray-200);
-      padding: 14px 40px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 40px;
+      display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
     }
     .btn {
-      padding: 9px 18px; border: none; border-radius: 6px; cursor: pointer;
+      padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer;
       font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500;
-      transition: all 0.2s; display: flex; align-items: center; gap: 5px; white-space: nowrap;
+      transition: all 0.2s; display: flex; align-items: center; gap: 6px;
+      white-space: nowrap;
     }
-    .btn-primary  { background: var(--accent); color: white; }
-    .btn-secondary{ background: var(--gray-100); color: var(--black); border: 1px solid var(--gray-200); }
-    .btn-gold     { background: var(--gold); color: white; }
-    /* Verstecktes File-Input → wird via Label ausgelöst */
+    .btn-primary   { background: var(--white); color: var(--bg); }
+    .btn-primary:hover { background: #ddd; }
+    .btn-secondary { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
+    .btn-secondary:hover { color: var(--white); }
+    .btn-gold      { background: var(--gold); color: #0d0d0d; font-weight: 600; }
+    .btn-gold:hover { background: var(--gold-dim); }
+    .btn:disabled  { opacity: 0.35; cursor: not-allowed; }
     .file-label {
-      padding: 9px 18px; background: var(--gray-100); border: 1px solid var(--gray-200);
-      border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500;
-      display: flex; align-items: center; gap: 5px;
+      padding: 8px 16px; background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 6px;
+      cursor: pointer; font-size: 13px; font-weight: 500; color: var(--muted);
+      display: flex; align-items: center; gap: 6px; transition: all 0.2s;
     }
+    .file-label:hover { color: var(--white); }
     #fileInput { display: none; }
+    .toolbar-sep { width: 1px; height: 28px; background: var(--border); margin: 0 2px; }
     select {
-      padding: 9px 12px; border: 1px solid var(--gray-200); border-radius: 6px;
-      font-family: 'Inter', sans-serif; font-size: 13px; background: white; min-width: 160px;
+      padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px;
+      font-family: 'Inter', sans-serif; font-size: 13px;
+      background: var(--surface2); color: var(--white); min-width: 150px;
     }
-    /* Status-Meldungen (Erfolg / Fehler / Laden) */
-    #status { font-size: 13px; font-weight: 500; padding: 6px 12px; border-radius: 20px; display: none; }
-    #status.success { background: #d8f3dc; color: var(--success); display: block; }
-    #status.error   { background: #ffe0e0; color: var(--error);   display: block; }
-    #status.loading { background: var(--gray-100); color: var(--gray-600); display: block; }
+    select option { background: var(--surface2); }
+    #status {
+      font-size: 12px; font-weight: 500; padding: 5px 12px;
+      border-radius: 20px; display: none; margin-left: 4px;
+    }
+    #status.success { background: rgba(45,106,79,0.3); color: #6fcf97; display: block; }
+    #status.error   { background: rgba(193,18,31,0.2); color: #ff6b6b; display: block; }
+    #status.loading { background: var(--surface2); color: var(--muted); display: block; }
 
-    /* ── Stats-Bar: zeigt Anzahl Fotos, Orte, Geräte ── */
+    /* ── STATS BAR ── */
     .stats-bar {
-      padding: 10px 40px; background: var(--gray-100);
-      border-bottom: 1px solid var(--gray-200);
-      display: flex; gap: 20px; align-items: center; flex-wrap: wrap;
+      padding: 9px 40px;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      display: flex; gap: 24px; align-items: center; flex-wrap: wrap;
     }
-    .stat { font-size: 12px; color: var(--gray-600); }
-    .stat strong { color: var(--black); font-weight: 600; }
-    #selectedCount { margin-left: auto; font-size: 12px; color: var(--gray-600); }
+    .stat { font-size: 12px; color: var(--muted); }
+    .stat strong { color: var(--white); font-weight: 600; }
+    #selectedCount { margin-left: auto; font-size: 12px; color: var(--gold); font-weight: 500; }
 
-    /* ── Galerie: CSS Grid, passt sich automatisch der Breite an ── */
+    /* ── GALLERY ── */
     .gallery-wrapper { padding: 28px 40px; }
-    .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; }
-
-    /* ── Foto-Karte: zeigt Bild + Standort + Gerät ── */
-    .photo-card {
-      border-radius: 10px; overflow: hidden; background: white;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.08); transition: all 0.25s; position: relative;
+    .gallery {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 18px;
     }
-    .photo-card:hover { transform: translateY(-4px); box-shadow: 0 8px 30px rgba(0,0,0,0.15); }
-    .photo-card.selected { outline: 3px solid var(--gold); outline-offset: 2px; } /* ausgewählt = Goldrahmen */
-    .photo-card img { width: 100%; height: 200px; object-fit: cover; display: block; cursor: zoom-in; }
-    .card-checkbox { position: absolute; top: 10px; left: 10px; width: 22px; height: 22px; accent-color: var(--gold); cursor: pointer; z-index: 2; }
-    .card-info { padding: 12px 14px; border-top: 1px solid var(--gray-100); }
-    .card-filename { font-size: 12px; color: var(--gray-600); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
-    .card-location { font-size: 13px; font-weight: 500; color: var(--accent); }
-    .card-location.no-location { color: var(--gray-400); font-style: italic; }
-    .card-device { font-size: 11px; color: var(--gray-400); margin-top: 3px; } /* Gerätename unter dem Foto */
 
-    /* ── Leerer Zustand + Lade-Spinner ── */
-    .empty-state { grid-column: 1/-1; text-align: center; padding: 80px 20px; color: var(--gray-400); }
-    .empty-state h3 { font-family: 'Playfair Display', serif; font-size: 22px; color: var(--gray-600); margin-bottom: 8px; }
-    .loading-grid { grid-column: 1/-1; display: flex; justify-content: center; padding: 60px; }
-    .spinner { width: 36px; height: 36px; border: 3px solid var(--gray-200); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    /* ── PHOTO CARD ── */
+    .photo-card {
+      border-radius: var(--radius); overflow: hidden;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      transition: all 0.25s; position: relative; cursor: pointer;
+    }
+    .photo-card:hover {
+      transform: translateY(-3px);
+      border-color: #3a3a3a;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    }
+    .photo-card.selected {
+      outline: 2px solid var(--gold);
+      outline-offset: 2px;
+      border-color: var(--gold);
+    }
+    .photo-thumb-wrap {
+      width: 100%; height: 210px; overflow: hidden;
+      position: relative; background: var(--surface2);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .photo-thumb-wrap img {
+      width: 100%; height: 100%; object-fit: cover;
+      display: block; cursor: zoom-in;
+      transition: opacity 0.3s;
+    }
+    .photo-thumb-wrap img.loading { opacity: 0; }
+    .photo-thumb-wrap img.loaded  { opacity: 1; }
+    /* Placeholder spinner while image loads */
+    .img-placeholder {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .img-placeholder.hidden { display: none; }
+    .mini-spinner {
+      width: 24px; height: 24px;
+      border: 2px solid var(--border);
+      border-top-color: var(--gold);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    .card-checkbox {
+      position: absolute; top: 10px; left: 10px;
+      width: 20px; height: 20px; accent-color: var(--gold);
+      cursor: pointer; z-index: 2;
+    }
+    .card-info { padding: 12px 14px; }
+    .card-filename {
+      font-size: 11px; color: var(--muted);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      margin-bottom: 5px;
+    }
+    .card-location { font-size: 13px; font-weight: 500; color: var(--white); }
+    .card-location.no-location { color: var(--muted); font-style: italic; }
+    .card-device { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+    /* ── EMPTY STATE ── */
+    .empty-state {
+      grid-column: 1/-1; text-align: center;
+      padding: 100px 20px; color: var(--muted);
+    }
+    .empty-state .icon { font-size: 52px; margin-bottom: 16px; opacity: 0.5; }
+    .empty-state h3 {
+      font-family: 'Playfair Display', serif; font-size: 22px;
+      color: var(--white); margin-bottom: 8px;
+    }
+    .loading-grid { grid-column: 1/-1; display: flex; justify-content: center; padding: 80px; }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 2px solid var(--border);
+      border-top-color: var(--gold);
+      border-radius: 50%; animation: spin 0.8s linear infinite;
+    }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* ── Upload-Overlay: Fortschrittsanzeige während dem Hochladen ── */
-    .upload-overlay { display: none; position: fixed; inset: 0; background: rgba(10,10,10,0.7); z-index: 200; align-items: center; justify-content: center; }
+    /* ── UPLOAD OVERLAY ── */
+    .upload-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.8); z-index: 200;
+      align-items: center; justify-content: center;
+      backdrop-filter: blur(4px);
+    }
     .upload-overlay.active { display: flex; }
-    .upload-modal { background: white; border-radius: 12px; padding: 40px; text-align: center; min-width: 280px; }
-    .upload-modal h3 { font-family: 'Playfair Display', serif; font-size: 20px; margin-bottom: 8px; }
-    .progress-bar { height: 6px; background: var(--gray-200); border-radius: 3px; overflow: hidden; }
-    .progress-fill { height: 100%; background: var(--gold); border-radius: 3px; transition: width 0.3s; }
+    .upload-modal {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 16px; padding: 44px 48px;
+      text-align: center; min-width: 300px;
+    }
+    .upload-modal h3 {
+      font-family: 'Playfair Display', serif; font-size: 20px;
+      color: var(--white); margin-bottom: 6px;
+    }
+    .upload-modal p { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+    .progress-bar {
+      height: 4px; background: var(--border);
+      border-radius: 2px; overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%; background: var(--gold);
+      border-radius: 2px; transition: width 0.3s;
+    }
 
-    /* ── Lightbox: Foto in Vollansicht mit Ort + Gerätinfos ── */
-    .lightbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 300; align-items: center; justify-content: center; flex-direction: column; gap: 16px; }
+    /* ── LIGHTBOX ── */
+    .lightbox {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.96); z-index: 300;
+      align-items: center; justify-content: center;
+      flex-direction: column; gap: 14px;
+      backdrop-filter: blur(8px);
+    }
     .lightbox.active { display: flex; }
-    .lightbox img { max-width: 90vw; max-height: 80vh; object-fit: contain; border-radius: 4px; }
-    .lightbox-info { color: white; font-size: 14px; text-align: center; }
-    .lightbox-device { color: var(--gray-400); font-size: 12px; }
-    .lightbox-close { position: absolute; top: 20px; right: 24px; font-size: 28px; color: white; cursor: pointer; background: none; border: none; }
+    .lightbox img {
+      max-width: 92vw; max-height: 80vh;
+      object-fit: contain; border-radius: 4px;
+      box-shadow: 0 20px 80px rgba(0,0,0,0.8);
+    }
+    .lightbox-info   { color: var(--white); font-size: 14px; text-align: center; }
+    .lightbox-device { color: var(--muted); font-size: 12px; }
+    .lightbox-close  {
+      position: absolute; top: 20px; right: 28px;
+      font-size: 26px; color: var(--muted); cursor: pointer;
+      background: none; border: none; transition: color 0.2s;
+    }
+    .lightbox-close:hover { color: var(--white); }
 
-    /* ── Responsive: kleinere Abstände auf Mobile ── */
-    @media (max-width: 600px) {
+    /* ── RESPONSIVE ── */
+    @media (max-width: 640px) {
       header, .toolbar, .gallery-wrapper, .stats-bar { padding-left: 16px; padding-right: 16px; }
+      .gallery { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+      .photo-thumb-wrap { height: 150px; }
     }
   </style>
 </head>
 <body>
 
-<!-- ── LOGIN-OVERLAY: erscheint beim ersten Öffnen der Seite ─────────────── -->
+<!-- ── LOGIN ── -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-box">
-    <h1>📸 Foto<span style="color:var(--gold)">Galerie</span></h1>
-    <p>Bitte einloggen um fortzufahren</p>
+    <div class="login-logo aperture-icon">
+      <svg width="44" height="44" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="22" cy="22" r="21" stroke="#c9a84c" stroke-width="1.5"/>
+        <circle cx="22" cy="22" r="14" stroke="#c9a84c" stroke-width="1" opacity="0.4"/>
+        <circle cx="22" cy="22" r="6"  fill="#c9a84c"/>
+        <line x1="22" y1="1"  x2="22" y2="8"  stroke="#c9a84c" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="22" y1="36" x2="22" y2="43" stroke="#c9a84c" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="1"  y1="22" x2="8"  y2="22" stroke="#c9a84c" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="36" y1="22" x2="43" y2="22" stroke="#c9a84c" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="5.4"  y1="5.4"  x2="9.8"  y2="9.8"  stroke="#c9a84c" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="34.2" y1="34.2" x2="38.6" y2="38.6" stroke="#c9a84c" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="38.6" y1="5.4"  x2="34.2" y2="9.8"  stroke="#c9a84c" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="9.8"  y1="34.2" x2="5.4"  y2="38.6" stroke="#c9a84c" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <div class="login-title">
+      <span class="kvp">KVP</span><span class="gold">Cinematic</span>
+    </div>
+    <div class="login-title light" style="font-size:16px;color:#888;font-family:'Inter',sans-serif;font-weight:300;margin-top:2px;">Portfolio</div>
+    <div class="login-sub">Privater Zugang</div>
     <input type="text"     id="loginUser" placeholder="Benutzername" autocomplete="username">
     <input type="password" id="loginPass" placeholder="Passwort"     autocomplete="current-password"
            onkeydown="if(event.key==='Enter') doLogin()">
     <button class="login-btn" onclick="doLogin()">Einloggen</button>
-    <div class="login-error" id="loginError">❌ Falscher Benutzername oder Passwort</div>
+    <div class="login-error" id="loginError">Falscher Benutzername oder Passwort</div>
   </div>
 </div>
 
-<!-- ── HEADER: Titel + Logout-Button ─────────────────────────────────────── -->
+<!-- ── HEADER ── -->
 <header>
-  <div class="logo">📸 Foto<span>Galerie</span></div>
-  <div style="display:flex;align-items:center;gap:12px">
-    <span style="font-size:12px;color:#aaa">VICC.TA1A.PA</span>
+  <div class="logo aperture-icon">
+    <svg width="28" height="28" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="22" cy="22" r="21" stroke="#c9a84c" stroke-width="1.5"/>
+      <circle cx="22" cy="22" r="6"  fill="#c9a84c"/>
+      <line x1="22" y1="1"  x2="22" y2="8"  stroke="#c9a84c" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="22" y1="36" x2="22" y2="43" stroke="#c9a84c" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="1"  y1="22" x2="8"  y2="22" stroke="#c9a84c" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="36" y1="22" x2="43" y2="22" stroke="#c9a84c" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="5.4"  y1="5.4"  x2="9.8"  y2="9.8"  stroke="#c9a84c" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="34.2" y1="34.2" x2="38.6" y2="38.6" stroke="#c9a84c" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="38.6" y1="5.4"  x2="34.2" y2="9.8"  stroke="#c9a84c" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="9.8"  y1="34.2" x2="5.4"  y2="38.6" stroke="#c9a84c" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+    <span><span class="kvp">KVP</span><span class="cinema">Cinematic</span> <span class="port">Portfolio</span></span>
+  </div>
+  <div class="header-right">
+    <span class="badge">VICC.TA1A.PA</span>
     <button class="logout-btn" onclick="doLogout()">Ausloggen</button>
   </div>
 </header>
 
-<!-- ── TOOLBAR: Aktionen (Upload, Filter, Download) ──────────────────────── -->
+<!-- ── TOOLBAR ── -->
 <div class="toolbar">
-  <!-- File-Input über Label ausgelöst (input bleibt versteckt) -->
-  <label class="file-label" for="fileInput">📁 Fotos wählen</label>
+  <label class="file-label" for="fileInput">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    Fotos wählen
+  </label>
   <input type="file" id="fileInput" accept="image/*" multiple onchange="onFileSelect()">
 
-  <!-- Upload-Button: inaktiv bis Fotos ausgewählt wurden -->
-  <button class="btn btn-primary" onclick="uploadPhotos()" id="uploadBtn" disabled>⬆️ Hochladen</button>
+  <button class="btn btn-primary" onclick="uploadPhotos()" id="uploadBtn" disabled>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+    Hochladen
+  </button>
 
-  <!-- Filter nach Ort (Dropdown wird dynamisch aus API befüllt) -->
+  <div class="toolbar-sep"></div>
+
   <select id="filterLocation" onchange="applyFilter()">
     <option value="">🌍 Alle Orte</option>
   </select>
 
-  <!-- Filter nach Gerät (Dropdown wird dynamisch aus API befüllt) -->
   <select id="filterDevice" onchange="applyFilter()">
-    <option value="">📱 Alle Geräte</option>
+    <option value="">📷 Alle Geräte</option>
   </select>
 
-  <button class="btn btn-gold"      onclick="downloadSelected()">⬇️ ZIP Download</button>
-  <button class="btn btn-secondary" onclick="selectAll()">☑️ Alle</button>
-  <button class="btn btn-secondary" onclick="deselectAll()">✕ Keine</button>
+  <div class="toolbar-sep"></div>
+
+  <button class="btn btn-gold" onclick="downloadSelected()">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    ZIP Download
+  </button>
+  <button class="btn btn-secondary" onclick="selectAll()">Alle</button>
+  <button class="btn btn-secondary" onclick="deselectAll()">Keine</button>
   <span id="status"></span>
 </div>
 
-<!-- ── STATS-BAR: Übersicht Anzahl Fotos / Orte / Geräte ──────────────────── -->
+<!-- ── STATS BAR ── -->
 <div class="stats-bar">
   <div class="stat">Fotos: <strong id="photoCount">–</strong></div>
   <div class="stat">Orte: <strong id="locationCount">–</strong></div>
   <div class="stat">Geräte: <strong id="deviceCount">–</strong></div>
-  <div id="selectedCount">0 ausgewählt</div>
+  <div id="selectedCount"></div>
 </div>
 
-<!-- ── GALERIE: Foto-Karten werden hier per JavaScript eingefügt ──────────── -->
+<!-- ── GALLERY ── -->
 <div class="gallery-wrapper">
   <div class="gallery" id="gallery">
     <div class="loading-grid"><div class="spinner"></div></div>
   </div>
 </div>
 
-<!-- ── UPLOAD-OVERLAY: Fortschrittsbalken während Upload ────────────────── -->
+<!-- ── UPLOAD OVERLAY ── -->
 <div class="upload-overlay" id="uploadOverlay">
   <div class="upload-modal">
-    <h3>Wird hochgeladen...</h3>
+    <h3>Wird hochgeladen</h3>
     <p id="uploadProgress">0 von 0 Fotos</p>
     <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
   </div>
 </div>
 
-<!-- ── LIGHTBOX: Foto-Vollansicht mit Ort + Gerätinfos ───────────────────── -->
+<!-- ── LIGHTBOX ── -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
-  <button class="lightbox-close">✕</button>
+  <button class="lightbox-close" onclick="closeLightbox()">✕</button>
   <img id="lightboxImg" src="" alt="">
   <div class="lightbox-info"   id="lightboxInfo"></div>
   <div class="lightbox-device" id="lightboxDevice"></div>
 </div>
 
 <script>
-  // ── API-Basis-URL: zeigt auf den Azure App Service ──────────────────────────
   const API = "https://app-fotogalerie-prod-f2cha4hehrgpefbt.germanywestcentral-01.azurewebsites.net";
-
-  // Globale Variable: Base64-kodierter Authorization-Header (HTTP Basic Auth)
   let authHeader = "";
 
-  // ── LOGIN: sendet Credentials an API zur Überprüfung ──────────────────────
+  // Speichere erzeugte Blob-URLs damit wir sie später revoken können
+  const blobUrls = new Map();
+
   function doLogin() {
     const u = document.getElementById("loginUser").value.trim();
     const p = document.getElementById("loginPass").value;
     if (!u || !p) return;
-
-    // HTTP Basic Auth: "username:password" → Base64 kodieren
     authHeader = "Basic " + btoa(u + ":" + p);
-
-    // Test-Request: 401 = falsch, 200 = korrekt
     fetch(`${API}/api/photos`, { headers: { "Authorization": authHeader } })
       .then(r => {
         if (r.status === 401) {
           document.getElementById("loginError").style.display = "block";
-          authHeader = ""; // ungültige Credentials zurücksetzen
+          authHeader = "";
         } else {
           document.getElementById("loginOverlay").classList.add("hidden");
           document.getElementById("loginError").style.display = "none";
-          init(); // App laden
+          init();
         }
       })
       .catch(() => {
@@ -265,8 +460,10 @@
       });
   }
 
-  // ── LOGOUT: Auth-Header löschen + Login-Overlay wieder zeigen ─────────────
   function doLogout() {
+    // Blob-URLs freigeben
+    blobUrls.forEach(url => URL.revokeObjectURL(url));
+    blobUrls.clear();
     authHeader = "";
     document.getElementById("loginUser").value = "";
     document.getElementById("loginPass").value = "";
@@ -274,7 +471,6 @@
     document.getElementById("gallery").innerHTML = '<div class="loading-grid"><div class="spinner"></div></div>';
   }
 
-  // ── Hilfsfunktion: fetch() immer mit Authorization-Header ─────────────────
   function authFetch(url, options = {}) {
     return fetch(url, {
       ...options,
@@ -282,27 +478,21 @@
     });
   }
 
-  // ── INIT: lädt Locations, Devices und Fotos parallel ──────────────────────
   async function init() {
     await Promise.all([loadLocations(), loadDevices(), loadPhotos()]);
   }
 
-  // ── STATUS: zeigt Erfolgs-/Fehlermeldungen in der Toolbar ─────────────────
   function setStatus(msg, type = "loading") {
     const el = document.getElementById("status");
     el.textContent = msg; el.className = type;
-    // Meldung nach 4 Sekunden automatisch ausblenden
     if (type !== "loading") setTimeout(() => { el.className = ""; el.textContent = ""; }, 4000);
   }
 
-  // ── Orte laden: befüllt das Location-Filter-Dropdown ──────────────────────
   async function loadLocations() {
     try {
       const locs = await (await authFetch(`${API}/api/locations`)).json();
       const sel = document.getElementById("filterLocation");
       sel.innerHTML = '<option value="">🌍 Alle Orte</option>';
-
-      // Länder als Optgroup
       const countries = [...new Set(locs.map(l => l.country))].filter(Boolean);
       if (countries.length) {
         const g = document.createElement("optgroup"); g.label = "Nach Land";
@@ -312,7 +502,6 @@
         });
         sel.appendChild(g);
       }
-      // Städte als Optgroup
       const cities = locs.filter(l => l.city);
       if (cities.length) {
         const g = document.createElement("optgroup"); g.label = "Nach Stadt";
@@ -326,71 +515,110 @@
     } catch(e) { console.error("Locations:", e); }
   }
 
-  // ── Geräte laden: befüllt das Device-Filter-Dropdown ──────────────────────
   async function loadDevices() {
     try {
       const devs = await (await authFetch(`${API}/api/devices`)).json();
       const sel = document.getElementById("filterDevice");
-      sel.innerHTML = '<option value="">📱 Alle Geräte</option>';
+      sel.innerHTML = '<option value="">📷 Alle Geräte</option>';
       devs.forEach(d => {
         const o = document.createElement("option");
-        o.value = d.device; o.text = `📱 ${d.device}`; sel.appendChild(o);
+        o.value = d.device; o.text = `📷 ${d.device}`; sel.appendChild(o);
       });
       document.getElementById("deviceCount").textContent = devs.length;
     } catch(e) { console.error("Devices:", e); }
   }
 
-  // ── Fotos laden: optional mit Filter (Ort / Land / Gerät) ─────────────────
   async function loadPhotos(city="", country="", device="") {
     document.getElementById("gallery").innerHTML = '<div class="loading-grid"><div class="spinner"></div></div>';
     try {
-      // Query-Parameter dynamisch zusammenbauen
       let url = `${API}/api/photos`;
       const params = [];
       if (city)    params.push(`city=${encodeURIComponent(city)}`);
       if (country) params.push(`country=${encodeURIComponent(country)}`);
       if (device)  params.push(`device=${encodeURIComponent(device)}`);
       if (params.length) url += "?" + params.join("&");
-
       const photos = await (await authFetch(url)).json();
       document.getElementById("photoCount").textContent = photos.length;
       renderGallery(photos);
     } catch(e) {
       document.getElementById("gallery").innerHTML = `
         <div class="empty-state">
-          <div style="font-size:48px;margin-bottom:16px">⚠️</div>
+          <div class="icon">⚠️</div>
           <h3>Verbindungsfehler</h3>
-          <p>API nicht erreichbar. Prüfe ob der App Service läuft.</p>
+          <p>API nicht erreichbar. Bitte App Service prüfen.</p>
         </div>`;
     }
   }
 
-  // ── Galerie rendern: erstellt HTML-Karten für jedes Foto ──────────────────
   function renderGallery(photos) {
     const g = document.getElementById("gallery");
     if (!photos.length) {
-      g.innerHTML = `<div class="empty-state"><div style="font-size:48px;margin-bottom:16px">📷</div><h3>Noch keine Fotos</h3><p>Lade dein erstes Foto hoch!</p></div>`;
+      g.innerHTML = `
+        <div class="empty-state">
+          <div class="icon">📷</div>
+          <h3>Noch keine Fotos</h3>
+          <p>Lade dein erstes Foto hoch!</p>
+        </div>`;
       return;
     }
-    // Für jedes Foto eine Karte mit Checkbox, Bild, Ort und Gerät erstellen
+    // Karten mit Lade-Platzhalter rendern
     g.innerHTML = photos.map(p => `
       <div class="photo-card" id="card-${p.id}" onclick="toggleSelect(event,${p.id})">
         <input type="checkbox" class="card-checkbox" data-id="${p.id}"
                onclick="event.stopPropagation()" onchange="onCheckbox(${p.id},this)">
-        <img src="${p.url}" alt="${p.filename}" loading="lazy"
-             onclick="event.stopPropagation();openLightbox('${p.url}','${p.filename}','${p.city||''}','${p.country||''}','${p.device||''}')">
+        <div class="photo-thumb-wrap">
+          <div class="img-placeholder" id="ph-${p.id}">
+            <div class="mini-spinner"></div>
+          </div>
+          <img id="img-${p.id}" class="loading" src="" alt="${escHtml(p.filename)}"
+               onclick="event.stopPropagation();openLightbox(${p.id},'${escHtml(p.filename)}','${escHtml(p.city||'')}','${escHtml(p.country||'')}','${escHtml(p.device||'')}')">
+        </div>
         <div class="card-info">
-          <div class="card-filename">${p.filename}</div>
+          <div class="card-filename">${escHtml(p.filename)}</div>
           ${p.city
-            ? `<div class="card-location">📍 ${p.city}, ${p.country}</div>`
+            ? `<div class="card-location">📍 ${escHtml(p.city)}, ${escHtml(p.country)}</div>`
             : '<div class="card-location no-location">Kein Standort</div>'}
-          ${p.device ? `<div class="card-device">📱 ${p.device}</div>` : ''}
+          ${p.device ? `<div class="card-device">📷 ${escHtml(p.device)}</div>` : ''}
         </div>
       </div>`).join("");
+
+    // Bilder asynchron über Backend-Proxy laden (löst den Blob-Storage-Zugriffsfehler)
+    photos.forEach(p => loadImage(p.id));
     updateSelectedCount();
   }
 
-  // ── Filter anwenden: liest beide Dropdowns und lädt gefilterte Fotos ──────
+  // Bild sicher über Auth-gesicherten Proxy laden
+  async function loadImage(id) {
+    try {
+      const res  = await authFetch(`${API}/api/photos/${id}/image`);
+      if (!res.ok) throw new Error("Bild nicht gefunden");
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      // Alte Blob-URL freigeben falls vorhanden
+      if (blobUrls.has(id)) URL.revokeObjectURL(blobUrls.get(id));
+      blobUrls.set(id, url);
+      const img = document.getElementById(`img-${id}`);
+      const ph  = document.getElementById(`ph-${id}`);
+      if (img) {
+        img.src = url;
+        img.onload = () => {
+          img.classList.remove("loading");
+          img.classList.add("loaded");
+          if (ph) ph.classList.add("hidden");
+        };
+      }
+    } catch(e) {
+      const ph = document.getElementById(`ph-${id}`);
+      if (ph) ph.innerHTML = '<span style="font-size:28px;opacity:0.3">📷</span>';
+    }
+  }
+
+  function escHtml(str) {
+    return String(str||"")
+      .replace(/&/g,"&amp;").replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  }
+
   function applyFilter() {
     const loc = document.getElementById("filterLocation").value;
     const dev = document.getElementById("filterDevice").value;
@@ -400,7 +628,6 @@
     loadPhotos(city, country, dev);
   }
 
-  // ── Datei-Auswahl: aktiviert Upload-Button nach Auswahl ───────────────────
   let selectedFiles = [];
   function onFileSelect() {
     selectedFiles = Array.from(document.getElementById("fileInput").files);
@@ -408,19 +635,18 @@
     if (selectedFiles.length) setStatus(`${selectedFiles.length} Foto(s) bereit`, "loading");
   }
 
-  // ── Upload: sendet Fotos einzeln an die API mit Fortschrittsbalken ─────────
   async function uploadPhotos() {
     if (!selectedFiles.length) return;
     const overlay      = document.getElementById("uploadOverlay");
     const progressText = document.getElementById("uploadProgress");
     const progressFill = document.getElementById("progressFill");
-    overlay.classList.add("active"); // Overlay einblenden
+    overlay.classList.add("active");
     let done = 0;
     for (const file of selectedFiles) {
       progressText.textContent = `${done+1} von ${selectedFiles.length} Fotos`;
       progressFill.style.width = `${(done/selectedFiles.length)*100}%`;
       const fd = new FormData();
-      fd.append("photo", file); // Foto als Multipart-Form-Data
+      fd.append("photo", file);
       await authFetch(`${API}/api/photos`, { method: "POST", body: fd });
       done++;
     }
@@ -430,11 +656,9 @@
     document.getElementById("uploadBtn").disabled = true;
     selectedFiles = [];
     setStatus(`✅ ${done} Foto(s) hochgeladen!`, "success");
-    // Galerie + Filter-Dropdowns neu laden
     await Promise.all([loadPhotos(), loadLocations(), loadDevices()]);
   }
 
-  // ── Auswahl-Funktionen: Checkbox-Status + Goldrahmen auf Karte ────────────
   function toggleSelect(event, id) {
     const cb = document.querySelector(`.card-checkbox[data-id="${id}"]`);
     if (!cb) return; cb.checked = !cb.checked; onCheckbox(id, cb);
@@ -445,14 +669,25 @@
     else            card.classList.remove("selected");
     updateSelectedCount();
   }
-  function selectAll()   { document.querySelectorAll(".card-checkbox").forEach(cb => { cb.checked=true;  document.getElementById(`card-${cb.dataset.id}`)?.classList.add("selected"); }); updateSelectedCount(); }
-  function deselectAll() { document.querySelectorAll(".card-checkbox").forEach(cb => { cb.checked=false; document.getElementById(`card-${cb.dataset.id}`)?.classList.remove("selected"); }); updateSelectedCount(); }
+  function selectAll()   {
+    document.querySelectorAll(".card-checkbox").forEach(cb => {
+      cb.checked = true;
+      document.getElementById(`card-${cb.dataset.id}`)?.classList.add("selected");
+    });
+    updateSelectedCount();
+  }
+  function deselectAll() {
+    document.querySelectorAll(".card-checkbox").forEach(cb => {
+      cb.checked = false;
+      document.getElementById(`card-${cb.dataset.id}`)?.classList.remove("selected");
+    });
+    updateSelectedCount();
+  }
   function updateSelectedCount() {
     const n = document.querySelectorAll(".card-checkbox:checked").length;
-    document.getElementById("selectedCount").textContent = n > 0 ? `${n} ausgewählt` : "0 ausgewählt";
+    document.getElementById("selectedCount").textContent = n > 0 ? `${n} ausgewählt` : "";
   }
 
-  // ── ZIP-Download: sendet ausgewählte IDs → API erstellt ZIP ───────────────
   async function downloadSelected() {
     const ids = [...document.querySelectorAll(".card-checkbox:checked")].map(c => +c.dataset.id);
     if (!ids.length) { setStatus("Bitte Fotos auswählen", "error"); return; }
@@ -462,24 +697,34 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ids })
     });
-    // Blob-URL erstellen und automatisch herunterladen
     const blob = await res.blob();
     Object.assign(document.createElement("a"),
-      { href: URL.createObjectURL(blob), download: "fotos.zip" }).click();
+      { href: URL.createObjectURL(blob), download: "kvp-fotos.zip" }).click();
     setStatus(`✅ ${ids.length} Foto(s) heruntergeladen`, "success");
   }
 
-  // ── Lightbox: zeigt Foto gross mit Ort + Gerätinfos ───────────────────────
-  function openLightbox(url, filename, city, country, device) {
-    document.getElementById("lightboxImg").src    = url;
-    document.getElementById("lightboxInfo").textContent   = city ? `📍 ${city}, ${country} — ${filename}` : filename;
-    document.getElementById("lightboxDevice").textContent = device ? `📱 ${device}` : "";
+  // Lightbox lädt ebenfalls über Backend-Proxy
+  function openLightbox(id, filename, city, country, device) {
+    const img = document.getElementById("lightboxImg");
+    img.src = "";
+    // Gecachte Blob-URL nutzen falls vorhanden, sonst neu laden
+    if (blobUrls.has(id)) {
+      img.src = blobUrls.get(id);
+    } else {
+      authFetch(`${API}/api/photos/${id}/image`)
+        .then(r => r.blob())
+        .then(blob => { img.src = URL.createObjectURL(blob); });
+    }
+    document.getElementById("lightboxInfo").textContent =
+      city ? `📍 ${city}, ${country}  ·  ${filename}` : filename;
+    document.getElementById("lightboxDevice").textContent =
+      device ? `📷 ${device}` : "";
     document.getElementById("lightbox").classList.add("active");
   }
   function closeLightbox() {
     document.getElementById("lightbox").classList.remove("active");
+    document.getElementById("lightboxImg").src = "";
   }
-  // ESC-Taste schliesst die Lightbox
   document.addEventListener("keydown", e => { if (e.key === "Escape") closeLightbox(); });
 </script>
 </body>
