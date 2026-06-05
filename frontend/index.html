@@ -1,1444 +1,1307 @@
 <!DOCTYPE html>
-<!--
-  index.html – KVPCinematic Portfolio
-  Design  : Apple-inspiriertes helles Interface
-  Hosting : Netlify (statisches HTML, kein eigener Server)
-  Backend : Azure App Service (Flask API)
-  Auth    : HTTP Basic Auth (Credentials werden nie im Browser gespeichert)
-  Bilder  : Werden über Backend-Proxy geladen (kein öffentlicher Blob-Zugriff)
--->
 <html lang="de">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>KVPCinematic Portfolio</title>
-  <!-- Google Fonts: Entspricht SF Pro (Apple Font) am nächsten -->
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <meta name="description" content="KVPCinematic – Professionelle Fotografie-Portfolio">
+  <meta name="robots" content="noindex, nofollow">
+
+  <!-- Google Fonts: Playfair Display (Serif-Headlines) + Inter (UI-Text) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+
   <style>
     /* ═══════════════════════════════════════════════════════════════════════
-       CSS-VARIABLEN – Apple Design System
-       ═══════════════════════════════════════════════════════════════════════ */
+       DESIGN TOKENS – hier zentral anpassen
+    ══════════════════════════════════════════════════════════════════════ */
     :root {
-      /* Hintergründe */
-      --bg:          #ffffff;
-      --bg-alt:      #f5f5f7;      /* Apple: hellgrau für Sektionen */
-      --bg-hover:    #f0f0f2;
-
-      /* Text */
-      --text:        #1d1d1f;      /* Apple: fast-schwarz */
-      --text-muted:  #6e6e73;      /* Apple: mittleres Grau */
-      --text-light:  #aeaeb2;      /* Apple: helles Grau */
-
-      /* Rahmen & Schatten */
-      --border:      #d2d2d7;      /* Apple: sehr helles Grau */
-      --shadow-sm:   0 1px 4px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
-      --shadow-md:   0 4px 16px rgba(0,0,0,.08), 0 2px 6px rgba(0,0,0,.05);
-      --shadow-lg:   0 12px 40px rgba(0,0,0,.12);
-
-      /* Akzentfarben */
-      --blue:        #0071e3;      /* Apple: primäres Blau */
-      --blue-hover:  #0077ed;
-      --blue-light:  #e8f2ff;
-      --red:         #ff3b30;      /* Apple: Löschen/Fehler */
-      --red-hover:   #ff2d20;
-      --red-light:   #fff0ef;
-      --green:       #34c759;      /* Apple: Erfolg */
-      --orange:      #ff9500;      /* Admin-Badge */
-
-      /* Layout */
-      --radius-sm:   6px;
-      --radius:      10px;
-      --radius-lg:   14px;
-      --header-h:    58px;
+      --bg:         #050505;
+      --surface:    #0f0f0f;
+      --surface2:   #1a1a1a;
+      --surface3:   #242424;
+      --border:     rgba(255,255,255,0.08);
+      --text:       #f0f0f0;
+      --text-muted: #888;
+      --text-dim:   #555;
+      --gold:       #c9a84c;
+      --gold-dim:   rgba(201,168,76,0.15);
+      --gold-glow:  rgba(201,168,76,0.35);
+      --gold-hover: #e0bf6e;
+      --red:        #e05252;
+      --red-dim:    rgba(224,82,82,0.15);
+      --green:      #52c97c;
+      --radius:     12px;
+      --radius-sm:  8px;
+      --shadow:     0 12px 48px rgba(0,0,0,0.65);
+      --shadow-sm:  0 3px 12px rgba(0,0,0,0.4);
+      --ease:       0.22s cubic-bezier(0.4,0,0.2,1);
+      --header-h:   64px;
     }
 
-    /* ── Reset & Basis ── */
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    /* ═══ RESET & BASE ══════════════════════════════════════════════════════ */
+    *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+    html { scroll-behavior:smooth; -webkit-font-smoothing:antialiased; }
     body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: var(--bg-alt);
-      color: var(--text);
-      min-height: 100vh;
-      -webkit-font-smoothing: antialiased;
+      background:var(--bg);
+      color:var(--text);
+      font-family:'Inter',system-ui,sans-serif;
+      font-size:14px;
+      line-height:1.6;
+      min-height:100vh;
     }
+    img  { display:block; width:100%; height:auto; }
+    button { cursor:pointer; border:none; background:none; font:inherit; }
+    input,select {
+      font:inherit; color:var(--text);
+      background:var(--surface2);
+      border:1px solid var(--border);
+      border-radius:var(--radius-sm);
+      padding:9px 13px;
+      outline:none;
+      transition:border-color var(--ease), box-shadow var(--ease);
+    }
+    input:focus,select:focus {
+      border-color:var(--gold);
+      box-shadow:0 0 0 3px var(--gold-dim);
+    }
+    select option { background:var(--surface2); }
+    ::placeholder { color:var(--text-dim); }
 
-    /* ═══════════════════════════════════════════════════════════════════════
-       LOGIN – Vollbild-Overlay
-       ═══════════════════════════════════════════════════════════════════════ */
-    .login-overlay {
-      position: fixed; inset: 0; z-index: 999;
-      background: var(--bg-alt);
-      display: flex; align-items: center; justify-content: center;
-    }
-    .login-overlay.hidden { display: none; }
-
-    .login-card {
-      background: var(--bg);
-      border-radius: var(--radius-lg);
-      border: 1px solid var(--border);
-      padding: 48px 44px;
-      width: 100%; max-width: 380px;
-      text-align: center;
-      box-shadow: var(--shadow-lg);
-    }
-
-    /* Kamera-Logo im Login */
-    .login-logo {
-      display: inline-flex; align-items: center; justify-content: center;
-      width: 64px; height: 64px; background: var(--bg-alt);
-      border-radius: 16px; border: 1px solid var(--border);
-      margin-bottom: 20px;
-    }
-    .login-logo svg { color: var(--blue); }
-
-    .login-card h1 {
-      font-size: 22px; font-weight: 700;
-      letter-spacing: -0.3px; margin-bottom: 4px;
-    }
-    .login-card h1 .cinema { color: var(--blue); }
-    .login-card p {
-      font-size: 13px; color: var(--text-muted);
-      margin-bottom: 28px;
-    }
-
-    .login-card input {
-      display: block; width: 100%;
-      padding: 11px 14px;
-      border: 1px solid var(--border); border-radius: var(--radius-sm);
-      font-size: 15px; font-family: inherit; color: var(--text);
-      background: var(--bg); margin-bottom: 10px;
-      transition: border-color .15s, box-shadow .15s;
-    }
-    .login-card input:focus {
-      outline: none; border-color: var(--blue);
-      box-shadow: 0 0 0 3px rgba(0,113,227,.12);
-    }
-    .login-card input::placeholder { color: var(--text-light); }
-
-    .btn-login {
-      display: block; width: 100%; margin-top: 6px;
-      padding: 12px; background: var(--blue); color: #fff;
-      border: none; border-radius: var(--radius-sm);
-      font-size: 15px; font-weight: 600; font-family: inherit;
-      cursor: pointer; transition: background .15s;
-    }
-    .btn-login:hover { background: var(--blue-hover); }
-
-    .login-error {
-      margin-top: 10px; font-size: 13px; color: var(--red); display: none;
-    }
-
-    /* ═══════════════════════════════════════════════════════════════════════
-       HEADER – Klebt oben, weiss mit feinem Schatten
-       ═══════════════════════════════════════════════════════════════════════ */
+    /* ═══ HEADER ════════════════════════════════════════════════════════════ */
     header {
-      height: var(--header-h);
-      background: rgba(255,255,255,.9);
-      backdrop-filter: saturate(180%) blur(12px);   /* Apple: Unschärfe-Effekt */
-      -webkit-backdrop-filter: saturate(180%) blur(12px);
-      border-bottom: 1px solid var(--border);
-      padding: 0 40px;
-      display: flex; align-items: center; justify-content: space-between;
-      position: sticky; top: 0; z-index: 100;
+      position:sticky; top:0; z-index:100;
+      height:var(--header-h);
+      background:rgba(5,5,5,0.88);
+      backdrop-filter:blur(24px) saturate(1.4);
+      -webkit-backdrop-filter:blur(24px) saturate(1.4);
+      border-bottom:1px solid var(--border);
     }
-
-    /* Logo + Navigation */
-    .header-left { display: flex; align-items: center; gap: 28px; }
+    .header-inner {
+      max-width:1600px; margin:0 auto; padding:0 24px;
+      height:100%;
+      display:flex; align-items:center; justify-content:space-between; gap:16px;
+    }
     .logo {
-      display: flex; align-items: center; gap: 9px;
-      font-size: 17px; font-weight: 700;
-      letter-spacing: -0.2px; text-decoration: none; color: var(--text);
+      display:flex; align-items:center; gap:10px;
+      font-family:'Playfair Display',serif;
+      font-size:18px; font-weight:700; letter-spacing:.04em;
+      white-space:nowrap; color:var(--text);
     }
-    .logo .cinema { color: var(--blue); }
-    .logo .port   { font-weight: 400; color: var(--text-muted); }
+    .logo-icon { color:var(--gold); flex-shrink:0; }
+    .logo .accent { color:var(--gold); }
 
-    /* Kamera-Icon im Header (kleiner als im Login) */
-    .logo-icon {
-      display: flex; align-items: center; justify-content: center;
-      width: 32px; height: 32px;
-      background: var(--blue-light); border-radius: 8px;
+    /* Header rechts */
+    .header-right { display:flex; align-items:center; gap:10px; }
+    .badge-role {
+      display:inline-flex; align-items:center;
+      padding:3px 9px; border-radius:100px;
+      font-size:10px; font-weight:700;
+      letter-spacing:.1em; text-transform:uppercase;
     }
-    .logo-icon svg { color: var(--blue); }
-
-    /* Nav-Tabs (Galerie / Benutzer) */
-    .nav-tabs { display: flex; gap: 4px; }
-    .nav-tab {
-      padding: 6px 14px; border-radius: var(--radius-sm);
-      font-size: 14px; font-weight: 500; color: var(--text-muted);
-      background: transparent; border: none; cursor: pointer;
-      font-family: inherit; transition: all .15s;
-    }
-    .nav-tab:hover   { background: var(--bg-hover); color: var(--text); }
-    .nav-tab.active  { background: var(--bg-alt);   color: var(--blue); font-weight: 600; }
-    .nav-tab.hidden  { display: none; }  /* Benutzer-Tab nur für Admins */
-
-    /* Rechte Seite: Benutzer-Badge + Rollen-Badge + Logout */
-    .header-right { display: flex; align-items: center; gap: 10px; }
-    .user-info    { font-size: 13px; color: var(--text-muted); }
-    .role-badge {
-      display: inline-block; padding: 2px 9px; border-radius: 20px;
-      font-size: 11px; font-weight: 600; text-transform: uppercase;
-      letter-spacing: .5px;
-    }
-    .role-badge.admin  { background: #fff3e0; color: var(--orange); }
-    .role-badge.user   { background: #e3f4ec; color: #1a7a3d; }
-    .role-badge.viewer { background: var(--bg-alt); color: var(--text-muted); }
-
-    .btn-logout {
-      padding: 6px 14px; background: var(--bg-alt);
-      border: 1px solid var(--border); border-radius: var(--radius-sm);
-      font-size: 13px; font-weight: 500; color: var(--text-muted);
-      cursor: pointer; font-family: inherit; transition: all .15s;
-    }
-    .btn-logout:hover { background: var(--bg-hover); color: var(--text); }
-
-    /* ═══════════════════════════════════════════════════════════════════════
-       TOOLBAR – Aktionsleiste unter dem Header
-       ═══════════════════════════════════════════════════════════════════════ */
-    .toolbar {
-      background: var(--bg);
-      border-bottom: 1px solid var(--border);
-      padding: 12px 40px;
-      display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    .badge-admin  { background:var(--gold-dim); color:var(--gold); border:1px solid rgba(201,168,76,.3); }
+    .badge-user   { background:rgba(82,201,124,.12); color:var(--green); border:1px solid rgba(82,201,124,.25); }
+    .badge-viewer { background:var(--surface3); color:var(--text-muted); border:1px solid var(--border); }
+    .user-name {
+      font-size:13px; font-weight:500; color:var(--text-muted);
+      max-width:110px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
     }
 
-    /* ── Buttons ── */
+    /* ═══ BUTTONS ═══════════════════════════════════════════════════════════ */
     .btn {
-      display: inline-flex; align-items: center; gap: 6px;
-      padding: 8px 16px; border-radius: 980px;  /* Apple: sehr runde Buttons */
-      font-family: inherit; font-size: 13px; font-weight: 500;
-      cursor: pointer; border: none; transition: all .15s;
-      white-space: nowrap; text-decoration: none;
+      display:inline-flex; align-items:center; gap:7px;
+      padding:8px 18px; border-radius:var(--radius-sm);
+      font-size:13px; font-weight:500;
+      transition:all var(--ease); white-space:nowrap;
     }
-    .btn:disabled { opacity: .35; cursor: not-allowed; }
+    .btn svg { pointer-events:none; }
+    .btn-primary { background:var(--gold); color:#000; }
+    .btn-primary:hover { background:var(--gold-hover); transform:translateY(-1px); box-shadow:0 4px 16px var(--gold-glow); }
+    .btn-ghost { background:transparent; color:var(--text-muted); border:1px solid var(--border); }
+    .btn-ghost:hover { background:var(--surface2); color:var(--text); border-color:rgba(255,255,255,.14); }
+    .btn-danger { background:var(--red-dim); color:var(--red); border:1px solid rgba(224,82,82,.25); }
+    .btn-danger:hover { background:rgba(224,82,82,.25); }
 
-    /* Primär (blau) – Hauptaktion */
-    .btn-primary { background: var(--blue); color: #fff; }
-    .btn-primary:hover:not(:disabled) { background: var(--blue-hover); }
-
-    /* Sekundär (grau) – Nebenahtion */
-    .btn-secondary {
-      background: var(--bg-alt); color: var(--text);
-      border: 1px solid var(--border);
+    /* ═══ HERO ══════════════════════════════════════════════════════════════ */
+    .hero {
+      text-align:center; padding:72px 24px 40px;
     }
-    .btn-secondary:hover:not(:disabled) { background: var(--bg-hover); }
-
-    /* Gefährlich (rot) – Löschen */
-    .btn-danger { background: var(--red-light); color: var(--red); }
-    .btn-danger:hover:not(:disabled) { background: var(--red); color: #fff; }
-
-    /* Upload-Label (verhält sich wie ein Button) */
-    .btn-upload {
-      display: inline-flex; align-items: center; gap: 6px;
-      padding: 8px 16px; border-radius: 980px;
-      font-family: inherit; font-size: 13px; font-weight: 500;
-      cursor: pointer; background: var(--blue); color: #fff;
-      transition: background .15s; white-space: nowrap;
+    .hero h1 {
+      font-family:'Playfair Display',serif;
+      font-size:clamp(26px,5vw,54px);
+      font-weight:700; line-height:1.15;
+      color:var(--text); margin-bottom:16px;
     }
-    .btn-upload:hover { background: var(--blue-hover); }
-
-    /* Verstecktes File-Input → wird über Label ausgelöst */
-    #fileInput { display: none; }
-
-    /* Filter-Dropdowns */
-    select {
-      padding: 8px 12px; border-radius: var(--radius-sm);
-      border: 1px solid var(--border); background: var(--bg);
-      font-family: inherit; font-size: 13px; color: var(--text);
-      cursor: pointer; transition: border-color .15s;
-    }
-    select:focus { outline: none; border-color: var(--blue); }
-
-    /* Trennlinie in der Toolbar */
-    .sep { width: 1px; height: 24px; background: var(--border); margin: 0 4px; }
-
-    /* Status-Meldung (Erfolg/Fehler/Laden) */
-    #status {
-      font-size: 12px; font-weight: 500; padding: 5px 12px;
-      border-radius: 20px; display: none;
-    }
-    #status.loading { background: var(--bg-alt); color: var(--text-muted); display: block; }
-    #status.success { background: #e3f4ec; color: #1a7a3d; display: block; }
-    #status.error   { background: var(--red-light); color: var(--red); display: block; }
-
-    /* ═══════════════════════════════════════════════════════════════════════
-       STATS-BAR – Zusammenfassung (Anzahl Fotos/Orte/Geräte)
-       ═══════════════════════════════════════════════════════════════════════ */
-    .stats-bar {
-      background: var(--bg); padding: 8px 40px;
-      border-bottom: 1px solid var(--border);
-      display: flex; gap: 20px; align-items: center; flex-wrap: wrap;
-    }
-    .stat { font-size: 12px; color: var(--text-muted); }
-    .stat strong { color: var(--text); font-weight: 600; }
-    #selectedCount {
-      margin-left: auto; font-size: 12px; font-weight: 600; color: var(--blue);
+    .hero h1 em { font-style:italic; color:var(--gold); }
+    .hero p { font-size:15px; color:var(--text-muted); max-width:440px; margin:0 auto 12px; }
+    .photo-counter {
+      font-size:12px; color:var(--text-dim);
+      letter-spacing:.08em; text-transform:uppercase;
     }
 
-    /* ═══════════════════════════════════════════════════════════════════════
-       GALERIE – CSS Grid
-       ═══════════════════════════════════════════════════════════════════════ */
-    .gallery-wrapper { padding: 24px 40px; }
-    .gallery {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-      gap: 16px;
+    /* ═══ CONTROLS ══════════════════════════════════════════════════════════ */
+    .controls {
+      max-width:1600px; margin:0 auto; padding:0 24px 32px;
+      display:flex; flex-wrap:wrap; gap:12px; align-items:center;
     }
+    .filters {
+      display:flex; flex-wrap:wrap; gap:8px;
+      align-items:center; flex:1;
+    }
+    .filters select { min-width:130px; font-size:13px; color:var(--text-muted); }
+    .filter-sep { width:1px; height:24px; background:var(--border); margin:0 4px; }
 
-    /* ── Foto-Karte ── */
+    .btn-fav-filter {
+      display:inline-flex; align-items:center; gap:6px;
+      padding:8px 14px; border-radius:var(--radius-sm);
+      font-size:13px; font-weight:500;
+      color:var(--text-muted); border:1px solid var(--border);
+      background:var(--surface2); transition:all var(--ease);
+    }
+    .btn-fav-filter svg { width:14px; height:14px; transition:fill var(--ease); }
+    .btn-fav-filter.active { background:rgba(224,82,82,.12); color:var(--red); border-color:rgba(224,82,82,.3); }
+    .btn-fav-filter.active svg { fill:var(--red); stroke:var(--red); }
+
+    .btn-reset {
+      padding:8px 14px; font-size:12px; color:var(--text-dim);
+      border:1px solid transparent; border-radius:var(--radius-sm);
+      transition:all var(--ease);
+    }
+    .btn-reset:hover { color:var(--text-muted); border-color:var(--border); }
+    .action-btns { display:flex; gap:8px; align-items:center; }
+
+    /* ═══ MASONRY GALLERY ═══════════════════════════════════════════════════ */
+    .gallery-wrap {
+      max-width:1600px; margin:0 auto; padding:0 16px 120px;
+    }
+    /* CSS-native Masonry → Spalten füllen sich von oben nach unten */
+    .gallery { columns:4 240px; column-gap:10px; }
+
     .photo-card {
-      background: var(--bg); border-radius: var(--radius);
-      border: 1px solid var(--border);
-      box-shadow: var(--shadow-sm);
-      overflow: hidden; cursor: pointer;
-      transition: box-shadow .2s, transform .2s;
-      position: relative;
+      break-inside:avoid; margin-bottom:10px;
+      position:relative; border-radius:var(--radius);
+      overflow:hidden; background:var(--surface2);
+      cursor:pointer;
+      transition:transform var(--ease), box-shadow var(--ease);
     }
-    .photo-card:hover {
-      box-shadow: var(--shadow-md);
-      transform: translateY(-2px);
+    .photo-card:hover { transform:translateY(-3px); box-shadow:0 20px 60px rgba(0,0,0,.7); }
+    .photo-card.selected { outline:2px solid var(--gold); outline-offset:2px; }
+    .photo-card img {
+      width:100%; height:auto; display:block;
+      transition:transform .4s cubic-bezier(.4,0,.2,1);
     }
-    /* Goldrahmen wenn ausgewählt */
-    .photo-card.selected {
-      outline: 2px solid var(--blue);
-      outline-offset: 2px;
-    }
+    .photo-card:hover img { transform:scale(1.03); }
 
-    /* Bildbereich mit Lade-Platzhalter */
-    .photo-thumb {
-      position: relative; width: 100%; height: 200px;
-      background: var(--bg-alt); overflow: hidden;
-      display: flex; align-items: center; justify-content: center;
+    /* Overlay: zeigt sich beim Hover */
+    .photo-overlay {
+      position:absolute; inset:0; opacity:0;
+      transition:opacity var(--ease);
+      background:linear-gradient(
+        to bottom,
+        rgba(0,0,0,.5) 0%, transparent 35%,
+        transparent 55%, rgba(0,0,0,.75) 100%
+      );
+      display:flex; flex-direction:column; justify-content:space-between; padding:10px;
     }
-    .photo-thumb img {
-      width: 100%; height: 100%; object-fit: cover;
-      cursor: zoom-in; opacity: 0;
-      transition: opacity .3s;
-    }
-    .photo-thumb img.loaded { opacity: 1; }
+    .photo-card:hover .photo-overlay,
+    .photo-card.selected .photo-overlay { opacity:1; }
 
-    /* Spinner-Platzhalter solange Bild lädt */
-    .thumb-placeholder {
-      position: absolute; inset: 0;
-      display: flex; align-items: center; justify-content: center;
-    }
-    .thumb-placeholder.hidden { display: none; }
-    .mini-spinner {
-      width: 20px; height: 20px;
-      border: 2px solid var(--border); border-top-color: var(--blue);
-      border-radius: 50%; animation: spin .7s linear infinite;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
+    .overlay-top { display:flex; justify-content:space-between; align-items:flex-start; }
+    .overlay-bottom { display:flex; align-items:flex-end; justify-content:space-between; }
+    .overlay-info { flex:1; display:flex; flex-direction:column; gap:4px; }
 
-    /* Checkbox oben-links */
-    .card-checkbox {
-      position: absolute; top: 10px; left: 10px;
-      width: 19px; height: 19px; accent-color: var(--blue);
-      cursor: pointer; z-index: 3;
+    .info-loc,.info-cam {
+      display:inline-flex; align-items:center; gap:4px;
+      font-size:11px; color:rgba(255,255,255,.9);
+      text-shadow:0 1px 4px rgba(0,0,0,.9); line-height:1.3;
     }
+    .info-cam { color:rgba(255,255,255,.6); }
 
-    /* Löschen-Button oben-rechts (nur für Admin sichtbar) */
-    .btn-delete-card {
-      position: absolute; top: 8px; right: 8px; z-index: 3;
-      width: 26px; height: 26px; border-radius: 50%;
-      background: rgba(255,255,255,.9); border: 1px solid var(--border);
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer; transition: all .15s;
-      opacity: 0;          /* Standardmässig unsichtbar */
+    /* Overlay-Buttons (Checkmark, Herz, Löschen) */
+    .btn-ov {
+      width:30px; height:30px; border-radius:50%;
+      display:inline-flex; align-items:center; justify-content:center;
+      background:rgba(0,0,0,.55); backdrop-filter:blur(4px);
+      color:rgba(255,255,255,.85); flex-shrink:0;
+      transition:all var(--ease);
     }
-    .photo-card:hover .btn-delete-card { opacity: 1; }
-    .btn-delete-card:hover {
-      background: var(--red); border-color: var(--red); color: #fff;
-    }
-    .btn-delete-card svg { pointer-events: none; }
-    .btn-delete-card.hidden { display: none; }
+    .btn-ov:hover { background:rgba(0,0,0,.82); color:#fff; transform:scale(1.08); }
+    .btn-ov svg { width:13px; height:13px; pointer-events:none; }
 
-    /* Karten-Info unter dem Bild */
-    .card-info { padding: 12px 14px; }
-    .card-filename {
-      font-size: 11px; color: var(--text-muted); margin-bottom: 4px;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
-    .card-location { font-size: 13px; font-weight: 500; color: var(--text); }
-    .card-location.no-loc { color: var(--text-light); font-style: italic; font-weight: 400; }
-    .card-device { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
-    .card-uploader {
-      font-size: 10px; color: var(--text-light); margin-top: 4px;
-      font-weight: 500; text-transform: uppercase; letter-spacing: .3px;
-    }
+    .btn-ov-select.active { background:var(--gold); color:#000; }
+    .btn-ov-fav.active,
+    .btn-ov-fav.active:hover { color:#e05252; }
+    .btn-ov-delete:hover { background:var(--red-dim); color:var(--red); }
 
-    /* ── Leer-Zustand & Ladezustand ── */
-    .empty-state {
-      grid-column: 1/-1; text-align: center; padding: 80px 24px;
-      color: var(--text-muted);
+    /* Platzhalter damit Lücke bleibt wenn kein Button */
+    .ov-spacer { width:30px; height:30px; }
+
+    /* ═══ EMPTY / LOADING STATE ════════════════════════════════════════════ */
+    .gallery-state {
+      text-align:center; padding:80px 24px;
+      color:var(--text-dim); width:100%;
     }
-    .empty-state .icon { font-size: 44px; margin-bottom: 12px; opacity: .4; }
-    .empty-state h3 { font-size: 18px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
-    .empty-state p  { font-size: 14px; }
-    .loading-grid { grid-column: 1/-1; display: flex; justify-content: center; padding: 80px; }
+    .gallery-state svg { margin:0 auto 16px; opacity:.25; }
+    .gallery-state p   { font-size:16px; }
+    .gallery-state small { font-size:12px; margin-top:6px; display:block; }
     .spinner {
-      width: 32px; height: 32px;
-      border: 2px solid var(--border); border-top-color: var(--blue);
-      border-radius: 50%; animation: spin .7s linear infinite;
+      width:34px; height:34px;
+      border:2px solid var(--surface3); border-top-color:var(--gold);
+      border-radius:50%; margin:0 auto 16px;
+      animation:spin .8s linear infinite;
     }
+    @keyframes spin { to { transform:rotate(360deg); } }
 
-    /* ═══════════════════════════════════════════════════════════════════════
-       UPLOAD-OVERLAY – Fortschrittsanzeige
-       ═══════════════════════════════════════════════════════════════════════ */
-    .upload-overlay {
-      display: none; position: fixed; inset: 0; z-index: 200;
-      background: rgba(0,0,0,.3); backdrop-filter: blur(4px);
-      align-items: center; justify-content: center;
-    }
-    .upload-overlay.active { display: flex; }
-    .upload-modal {
-      background: var(--bg); border-radius: var(--radius-lg);
-      border: 1px solid var(--border); padding: 36px 44px;
-      min-width: 280px; text-align: center;
-      box-shadow: var(--shadow-lg);
-    }
-    .upload-modal h3 { font-size: 17px; font-weight: 600; margin-bottom: 6px; }
-    .upload-modal p  { font-size: 13px; color: var(--text-muted); margin-bottom: 18px; }
-    .progress-bar    { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
-    .progress-fill   { height: 100%; background: var(--blue); border-radius: 2px; transition: width .25s; }
-
-    /* ═══════════════════════════════════════════════════════════════════════
-       LIGHTBOX – Vollansicht
-       ═══════════════════════════════════════════════════════════════════════ */
+    /* ═══ LIGHTBOX ══════════════════════════════════════════════════════════ */
     .lightbox {
-      display: none; position: fixed; inset: 0; z-index: 300;
-      background: rgba(0,0,0,.88); backdrop-filter: blur(8px);
-      flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+      position:fixed; inset:0; z-index:200;
+      background:rgba(0,0,0,.96); backdrop-filter:blur(8px);
+      display:none; align-items:center; justify-content:center; padding:40px;
     }
-    .lightbox.active { display: flex; }
-    .lightbox img {
-      max-width: 92vw; max-height: 78vh; object-fit: contain;
-      border-radius: 6px; box-shadow: 0 20px 60px rgba(0,0,0,.5);
+    .lightbox.open { display:flex; }
+    .lb-close {
+      position:fixed; top:18px; right:18px;
+      width:40px; height:40px; border-radius:50%;
+      background:rgba(255,255,255,.08); color:rgba(255,255,255,.65);
+      display:flex; align-items:center; justify-content:center;
+      transition:all var(--ease); z-index:201;
     }
-    .lightbox-info   { color: #fff; font-size: 14px; font-weight: 500; }
-    .lightbox-device { color: rgba(255,255,255,.55); font-size: 12px; }
-    .btn-lightbox-close {
-      position: absolute; top: 20px; right: 24px;
-      background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.2);
-      color: #fff; border-radius: 50%; width: 34px; height: 34px;
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer; font-size: 16px; transition: background .15s;
+    .lb-close:hover { background:rgba(255,255,255,.15); color:#fff; }
+    .lb-counter {
+      position:fixed; top:26px; left:50%; transform:translateX(-50%);
+      font-size:12px; color:rgba(255,255,255,.35); letter-spacing:.08em;
+      pointer-events:none;
     }
-    .btn-lightbox-close:hover { background: rgba(255,255,255,.25); }
+    .lb-inner {
+      position:relative; max-width:90vw; max-height:90vh;
+      display:flex; flex-direction:column; align-items:center; gap:14px;
+    }
+    .lb-img-wrap {
+      position:relative; display:flex;
+      align-items:center; justify-content:center;
+    }
+    #lbImg {
+      max-width:90vw; max-height:80vh;
+      object-fit:contain; border-radius:6px; box-shadow:var(--shadow);
+    }
+    .lb-nav {
+      position:absolute; top:50%; transform:translateY(-50%);
+      width:44px; height:44px; border-radius:50%;
+      background:rgba(0,0,0,.6); backdrop-filter:blur(4px); color:#fff;
+      display:flex; align-items:center; justify-content:center;
+      transition:all var(--ease); z-index:1;
+    }
+    .lb-nav:hover { background:rgba(0,0,0,.88); transform:translateY(-50%) scale(1.08); }
+    .lb-prev { left:-54px; }
+    .lb-next { right:-54px; }
+    .lb-nav svg { width:18px; height:18px; pointer-events:none; }
+    .lb-meta { text-align:center; }
+    .lb-meta h3 { font-family:'Playfair Display',serif; font-size:15px; margin-bottom:4px; }
+    .lb-meta p  { font-size:12px; color:var(--text-muted); }
 
-    /* ═══════════════════════════════════════════════════════════════════════
-       BENUTZERVERWALTUNG – Admin-Bereich
-       ═══════════════════════════════════════════════════════════════════════ */
-    .users-wrapper { padding: 24px 40px; display: none; }
-    .users-wrapper.active { display: block; }
-
-    .users-header {
-      display: flex; align-items: center; justify-content: space-between;
-      margin-bottom: 20px;
+    /* ═══ FLOATING BULK BAR ═════════════════════════════════════════════════ */
+    .bulk-bar {
+      position:fixed; bottom:28px; left:50%;
+      transform:translateX(-50%) translateY(120px);
+      z-index:150;
+      background:var(--surface2); border:1px solid var(--border);
+      border-radius:100px;
+      padding:8px 8px 8px 20px;
+      display:flex; align-items:center; gap:8px;
+      box-shadow:0 20px 60px rgba(0,0,0,.75), 0 0 0 1px rgba(255,255,255,.04);
+      transition:transform .35s cubic-bezier(.34,1.56,.64,1);
+      white-space:nowrap;
     }
-    .users-header h2 { font-size: 20px; font-weight: 700; letter-spacing: -.2px; }
+    .bulk-bar.visible { transform:translateX(-50%) translateY(0); }
+    .bulk-count { font-size:13px; font-weight:600; color:var(--gold); padding-right:10px; border-right:1px solid var(--border); }
+    .bulk-bar .btn { border-radius:100px; font-size:12px; padding:7px 16px; }
 
-    /* Neuen Benutzer anlegen – Formular */
+    /* ═══ MODALS ════════════════════════════════════════════════════════════ */
+    .modal-overlay {
+      position:fixed; inset:0; z-index:300;
+      background:rgba(0,0,0,.82); backdrop-filter:blur(12px);
+      display:none; align-items:center; justify-content:center; padding:24px;
+    }
+    .modal-overlay.open { display:flex; }
+    .modal {
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:20px; padding:36px;
+      width:100%; max-width:390px;
+      box-shadow:var(--shadow); position:relative;
+    }
+    .modal-close {
+      position:absolute; top:16px; right:16px;
+      width:32px; height:32px; border-radius:50%;
+      background:var(--surface2); color:var(--text-muted);
+      display:flex; align-items:center; justify-content:center;
+      transition:all var(--ease);
+    }
+    .modal-close:hover { background:var(--surface3); color:var(--text); }
+    .modal-logo {
+      display:flex; align-items:center; justify-content:center;
+      gap:10px; margin-bottom:24px;
+      font-family:'Playfair Display',serif; font-size:20px; font-weight:700;
+    }
+    .modal-logo .accent { color:var(--gold); }
+    .modal h2 {
+      font-family:'Playfair Display',serif; font-size:22px;
+      text-align:center; margin-bottom:6px;
+    }
+    .modal .subtitle { text-align:center; font-size:13px; color:var(--text-muted); margin-bottom:28px; }
+
+    .form-group { margin-bottom:14px; }
+    .form-group label {
+      display:block; font-size:11px; font-weight:600;
+      color:var(--text-dim); margin-bottom:6px;
+      text-transform:uppercase; letter-spacing:.06em;
+    }
+    .form-group input,.form-group select { width:100%; }
+    .modal .btn-primary {
+      width:100%; justify-content:center;
+      padding:13px; font-size:14px; font-weight:600;
+      margin-top:8px; border-radius:var(--radius-sm);
+    }
+    .login-error {
+      margin-top:14px; padding:10px 14px;
+      border-radius:var(--radius-sm);
+      background:var(--red-dim); border:1px solid rgba(224,82,82,.25);
+      color:var(--red); font-size:13px; display:none;
+    }
+    .login-error.show { display:block; }
+
+    /* ═══ UPLOAD MODAL ══════════════════════════════════════════════════════ */
+    .drop-zone {
+      border:2px dashed var(--border); border-radius:var(--radius);
+      padding:36px 20px; text-align:center; cursor:pointer;
+      transition:all var(--ease); color:var(--text-dim);
+    }
+    .drop-zone:hover,.drop-zone.drag-over { border-color:var(--gold); background:var(--gold-dim); color:var(--text-muted); }
+    .drop-zone svg { margin:0 auto 12px; opacity:.45; }
+    .drop-zone p   { font-size:14px; }
+    .drop-zone small { font-size:11px; margin-top:4px; display:block; color:var(--text-dim); }
+    .upload-progress { display:none; flex-direction:column; gap:8px; margin-top:18px; }
+    .upload-progress.show { display:flex; }
+    .prog-bar-wrap { background:var(--surface3); border-radius:100px; height:3px; overflow:hidden; }
+    .prog-bar { height:100%; background:var(--gold); border-radius:100px; transition:width .3s; width:0%; }
+    .prog-label { font-size:12px; color:var(--text-muted); text-align:center; }
+
+    /* ═══ ADMIN PANEL ═══════════════════════════════════════════════════════ */
+    .admin-section { max-width:1600px; margin:0 auto; padding:0 24px 80px; display:none; }
+    .admin-section.show { display:block; }
+    .section-hdr {
+      display:flex; align-items:center; justify-content:space-between;
+      margin-bottom:24px; padding-bottom:16px; border-bottom:1px solid var(--border);
+    }
+    .section-title { font-family:'Playfair Display',serif; font-size:22px; }
+
+    .user-table { width:100%; border-collapse:collapse; font-size:13px; }
+    .user-table th {
+      text-align:left; padding:10px 16px;
+      font-size:11px; font-weight:600; color:var(--text-dim);
+      text-transform:uppercase; letter-spacing:.07em;
+      border-bottom:1px solid var(--border);
+    }
+    .user-table td { padding:12px 16px; border-bottom:1px solid var(--border); color:var(--text-muted); }
+    .user-table tr:hover td { background:var(--surface2); }
+    .user-table tr:last-child td { border-bottom:none; }
+
     .new-user-form {
-      background: var(--bg); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 20px 24px;
-      margin-bottom: 20px; display: none;
+      display:grid; grid-template-columns:1fr 1fr 1fr 1fr auto;
+      gap:8px; align-items:end;
+      background:var(--surface2); border:1px solid var(--border);
+      border-radius:var(--radius); padding:16px; margin-top:20px;
     }
-    .new-user-form.active { display: block; }
-    .new-user-form h3 { font-size: 15px; font-weight: 600; margin-bottom: 14px; }
-    .form-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
-    .form-field { display: flex; flex-direction: column; gap: 4px; }
-    .form-field label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .4px; }
-    .form-field input,
-    .form-field select {
-      padding: 9px 12px; border-radius: var(--radius-sm);
-      border: 1px solid var(--border); font-family: inherit; font-size: 14px;
-      color: var(--text); background: var(--bg);
-    }
-    .form-field input:focus,
-    .form-field select:focus { outline: none; border-color: var(--blue); }
+    .new-user-form .form-group { margin:0; }
 
-    /* Benutzer-Tabelle */
-    .users-table-wrap {
-      background: var(--bg); border: 1px solid var(--border);
-      border-radius: var(--radius); overflow: hidden;
+    /* ═══ TOAST ══════════════════════════════════════════════════════════════ */
+    .toast-wrap { position:fixed; bottom:24px; right:24px; z-index:400; display:flex; flex-direction:column; gap:8px; pointer-events:none; }
+    .toast {
+      padding:12px 18px; border-radius:var(--radius-sm); font-size:13px; font-weight:500;
+      opacity:0; transform:translateY(10px); transition:all .3s ease;
+      box-shadow:var(--shadow-sm); max-width:320px;
     }
-    table { width: 100%; border-collapse: collapse; }
-    thead { background: var(--bg-alt); }
-    th {
-      padding: 10px 16px; text-align: left;
-      font-size: 11px; font-weight: 600; color: var(--text-muted);
-      text-transform: uppercase; letter-spacing: .4px;
-      border-bottom: 1px solid var(--border);
-    }
-    td {
-      padding: 12px 16px; font-size: 14px;
-      border-bottom: 1px solid var(--border);
-    }
-    tr:last-child td { border-bottom: none; }
-    tr:hover td      { background: var(--bg-alt); }
+    .toast.show { opacity:1; transform:translateY(0); }
+    .toast-success { background:rgba(82,201,124,.14); border:1px solid rgba(82,201,124,.3); color:var(--green); }
+    .toast-error   { background:var(--red-dim); border:1px solid rgba(224,82,82,.3); color:var(--red); }
+    .toast-info    { background:var(--surface2); border:1px solid var(--border); color:var(--text-muted); }
 
-    /* Rollen-Badges in Tabelle */
-    .badge {
-      display: inline-block; padding: 2px 9px; border-radius: 20px;
-      font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px;
+    /* ═══ FOOTER ════════════════════════════════════════════════════════════ */
+    footer {
+      text-align:center; padding:32px 24px;
+      color:var(--text-dim); font-size:12px;
+      border-top:1px solid var(--border);
     }
-    .badge.admin  { background: #fff3e0; color: var(--orange); }
-    .badge.user   { background: #e3f4ec; color: #1a7a3d; }
-    .badge.viewer { background: var(--bg-alt); color: var(--text-muted); }
+    footer .accent { color:var(--gold); }
 
-    /* ═══════════════════════════════════════════════════════════════════════
-       RESPONSIVE – Mobile Anpassungen
-       ═══════════════════════════════════════════════════════════════════════ */
-    @media (max-width: 640px) {
-      header, .toolbar, .gallery-wrapper, .stats-bar,
-      .users-wrapper { padding-left: 16px; padding-right: 16px; }
-      .gallery { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
-      .photo-thumb { height: 155px; }
-      .header-left .nav-tabs { display: none; }
-      .logo .port { display: none; }
+    /* ═══ RESPONSIVE ════════════════════════════════════════════════════════ */
+    @media(max-width:768px){
+      :root { --header-h:56px; }
+      .hero { padding:44px 16px 28px; }
+      .gallery-wrap { padding:0 10px 100px; }
+      .gallery { columns:2 160px; column-gap:8px; }
+      .photo-card { margin-bottom:8px; }
+      .controls { padding:0 16px 20px; }
+      .filters select { min-width:110px; }
+      .lb-prev { left:-44px; } .lb-next { right:-44px; }
+      .bulk-bar { max-width:96vw; bottom:20px; }
+      .new-user-form { grid-template-columns:1fr 1fr; }
+      .logo-text { display:none; }
+    }
+    @media(max-width:480px){
+      .gallery { columns:2 130px; }
+      .lightbox { padding:16px 6px; }
+      .lb-prev { left:-6px; } .lb-next { right:-6px; }
+      .lb-nav { width:36px; height:36px; }
+    }
+    @media(max-width:360px){
+      .gallery { columns:1; }
     }
   </style>
 </head>
+
 <body>
 
-<!-- ═══════════════════════════════════════════════════════════════════════
-     LOGIN-OVERLAY
-     Erscheint beim ersten Öffnen und nach dem Ausloggen.
-     Sendet einen Test-Request an /api/photos um Credentials zu prüfen.
-     ═══════════════════════════════════════════════════════════════════════ -->
-<div class="login-overlay" id="loginOverlay">
-  <div class="login-card">
-    <!-- Kamera-Icon -->
-    <div class="login-logo">
-      <svg width="28" height="24" viewBox="0 0 28 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="1" y="7" width="26" height="16" rx="3"/>
-        <path d="M9 7V5.5C9 4.7 9.7 4 10.5 4h7C18.3 4 19 4.7 19 5.5V7"/>
-        <circle cx="14" cy="15" r="4.5"/>
-        <circle cx="14" cy="15" r="1.8" fill="currentColor" stroke="none"/>
-        <circle cx="22.5" cy="11" r="1" fill="currentColor" stroke="none" opacity=".6"/>
-      </svg>
-    </div>
-
-    <h1>KVP<span class="cinema">Cinematic</span></h1>
-    <p>Portfolio · Privater Zugang</p>
-
-    <input type="text"     id="loginUser" placeholder="Benutzername"
-           autocomplete="username" onkeydown="if(event.key==='Enter')doLogin()">
-    <input type="password" id="loginPass" placeholder="Passwort"
-           autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
-    <button class="btn-login" onclick="doLogin()">Einloggen</button>
-    <div class="login-error" id="loginError"></div>
-  </div>
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════════════════
-     HEADER
-     Klebt oben. Zeigt Logo, Nav-Tabs, Benutzer-Info und Logout.
-     Die "Benutzer"-Tab ist nur für Admins sichtbar (wird per JS eingeblendet).
-     ═══════════════════════════════════════════════════════════════════════ -->
-<header>
-  <div class="header-left">
-    <!-- Logo -->
-    <div class="logo">
-      <div class="logo-icon">
-        <svg width="17" height="15" viewBox="0 0 28 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="1" y="7" width="26" height="16" rx="3"/>
-          <path d="M9 7V5.5C9 4.7 9.7 4 10.5 4h7C18.3 4 19 4.7 19 5.5V7"/>
-          <circle cx="14" cy="15" r="4.5"/>
-          <circle cx="14" cy="15" r="1.8" fill="currentColor" stroke="none"/>
+  <!-- ══════════════════════════════ HEADER ══════════════════════════════ -->
+  <header>
+    <div class="header-inner">
+      <!-- Logo -->
+      <a class="logo" href="#top">
+        <svg class="logo-icon" width="26" height="26" viewBox="0 0 24 24"
+             fill="none" stroke="currentColor" stroke-width="1.5"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+          <circle cx="12" cy="13" r="4"/>
+          <circle cx="12" cy="13" r="1.5" fill="currentColor" stroke="none"/>
         </svg>
-      </div>
-      <span>KVP<span class="cinema">Cinematic</span> <span class="port">Portfolio</span></span>
+        <span class="logo-text">KVP<span class="accent">Cinematic</span></span>
+      </a>
+      <!-- Rechte Seite: Login / User-Badge -->
+      <div class="header-right" id="headerRight"></div>
     </div>
+  </header>
 
-    <!-- Navigation-Tabs (Galerie / Benutzer) -->
-    <nav class="nav-tabs">
-      <button class="nav-tab active" onclick="showGallery()" id="tabGallery">Galerie</button>
-      <button class="nav-tab hidden" onclick="showUsers()"   id="tabUsers">Benutzer</button>
-    </nav>
+  <!-- ══════════════════════════════ HERO ════════════════════════════════ -->
+  <section class="hero" id="top">
+    <h1>Entdecke die Welt<br><em>durch das Objektiv</em></h1>
+    <p>Eine kuratierte Sammlung der schönsten Momente und Orte</p>
+    <div class="photo-counter" id="photoCounter">Galerie wird geladen…</div>
+  </section>
+
+  <!-- ══════════════════════════ CONTROLS ════════════════════════════════ -->
+  <div class="controls">
+    <div class="filters" id="filtersRow">
+      <select id="filterCity"    onchange="loadGallery()"><option value="">Alle Orte</option></select>
+      <select id="filterCountry" onchange="loadGallery()"><option value="">Alle Länder</option></select>
+      <select id="filterDevice"  onchange="loadGallery()"><option value="">Alle Kameras</option></select>
+      <div class="filter-sep"></div>
+      <button class="btn-fav-filter" id="favFilterBtn" onclick="toggleFavFilter()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06
+                   a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78
+                   1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+        </svg>
+        Favoriten
+      </button>
+      <button class="btn-reset" onclick="resetFilters()">Zurücksetzen</button>
+    </div>
+    <!-- Aktions-Buttons (nur eingeloggte Nutzer mit entsprechender Rolle) -->
+    <div class="action-btns" id="actionBtns" style="display:none">
+      <button class="btn btn-ghost" id="uploadBtn" onclick="openUploadModal()" style="display:none">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/>
+          <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+        </svg>
+        Foto hochladen
+      </button>
+      <button class="btn btn-ghost" id="adminBtn" onclick="toggleAdminPanel()" style="display:none">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+        Benutzer
+      </button>
+    </div>
   </div>
 
-  <!-- Rechte Seite: Benutzer-Badge + Logout -->
-  <div class="header-right">
-    <span class="user-info" id="headerUserInfo"></span>
-    <span class="role-badge" id="headerRoleBadge"></span>
-    <button class="btn-logout" onclick="doLogout()">Ausloggen</button>
+  <!-- ══════════════════════════════ GALERIE ══════════════════════════════ -->
+  <div class="gallery-wrap">
+    <div class="gallery" id="gallery">
+      <div class="gallery-state">
+        <div class="spinner"></div>
+        <p>Galerie wird geladen…</p>
+      </div>
+    </div>
   </div>
-</header>
 
-<!-- ═══════════════════════════════════════════════════════════════════════
-     TOOLBAR
-     Aktionsleiste mit kontextsensitiven Buttons (je nach Rolle).
-     Upload-Button löst den Datei-Picker aus und lädt sofort hoch.
-     ═══════════════════════════════════════════════════════════════════════ -->
-<div class="toolbar" id="toolbar">
-  <!-- Upload-Button: kombinierter Select+Upload (öffnet Datei-Picker → Auto-Upload) -->
-  <!-- Nur für admin und user sichtbar, viewer sieht diesen Button nicht -->
-  <!-- Upload-Button: Button statt Label → funktioniert zuverlässig auf iOS/Android/Desktop -->
-  <button class="btn-upload" id="uploadLabel" type="button" onclick="triggerFileInput()">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-      <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-    </svg>
-    Fotos hochladen
-  </button>
-  <!-- File-Input: per JS ausgelöst (display:none + label funktioniert auf iOS nicht zuverlässig) -->
-  <input type="file" id="fileInput" accept="image/*" multiple onchange="autoUpload()"
-         style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;">
+  <!-- ══════════════════════════ ADMIN PANEL ══════════════════════════════ -->
+  <section class="admin-section" id="adminSection">
+    <div class="section-hdr">
+      <h2 class="section-title">Benutzerverwaltung</h2>
+    </div>
+    <table class="user-table">
+      <thead>
+        <tr>
+          <th>ID</th><th>Benutzername</th><th>Anzeigename</th>
+          <th>Rolle</th><th>Erstellt</th><th>Aktionen</th>
+        </tr>
+      </thead>
+      <tbody id="userTableBody"></tbody>
+    </table>
+    <!-- Neuer Benutzer -->
+    <div class="new-user-form">
+      <div class="form-group">
+        <label>Benutzername</label>
+        <input id="newUsername" type="text" placeholder="max.mustermann">
+      </div>
+      <div class="form-group">
+        <label>Passwort</label>
+        <input id="newPassword" type="password" placeholder="mind. 6 Zeichen">
+      </div>
+      <div class="form-group">
+        <label>Anzeigename</label>
+        <input id="newDisplayName" type="text" placeholder="Max Mustermann">
+      </div>
+      <div class="form-group">
+        <label>Rolle</label>
+        <select id="newRole">
+          <option value="viewer">Viewer</option>
+          <option value="user">User</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+      <div style="padding-top:18px">
+        <button class="btn btn-primary" onclick="createUser()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          Anlegen
+        </button>
+      </div>
+    </div>
+  </section>
 
-  <div class="sep"></div>
+  <footer>
+    <p>&copy; 2026 <span class="accent">KVPCinematic</span> Portfolio — Alle Rechte vorbehalten</p>
+  </footer>
 
-  <!-- Ortsfilter – Dropdown (wird dynamisch aus API befüllt) -->
-  <select id="filterLocation" onchange="applyFilter()">
-    <option value="">Alle Orte</option>
-  </select>
-
-  <!-- Gerätefilter – Dropdown (wird dynamisch aus API befüllt) -->
-  <select id="filterDevice" onchange="applyFilter()">
-    <option value="">Alle Geräte</option>
-  </select>
-
-  <div class="sep"></div>
-
-  <!-- ZIP-Download: lädt alle ausgewählten Fotos als ZIP -->
-  <button class="btn btn-secondary" onclick="downloadSelected()">
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-      <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-    </svg>
-    ZIP Download
-  </button>
-
-  <!-- Alle auswählen / Auswahl aufheben -->
-  <button class="btn btn-secondary" onclick="selectAll()">Alle</button>
-  <button class="btn btn-secondary" onclick="deselectAll()">Keine</button>
-
-  <!-- Status-Meldung (Erfolg/Fehler/Laden) -->
-  <span id="status"></span>
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════════════════
-     STATS-BAR
-     Zeigt Anzahl Fotos, Orte, Geräte und aktuelle Auswahl.
-     ═══════════════════════════════════════════════════════════════════════ -->
-<div class="stats-bar">
-  <div class="stat">Fotos: <strong id="photoCount">–</strong></div>
-  <div class="stat">Orte: <strong id="locationCount">–</strong></div>
-  <div class="stat">Geräte: <strong id="deviceCount">–</strong></div>
-  <div id="selectedCount"></div>
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════════════════
-     GALERIE
-     Foto-Karten werden per JavaScript eingefügt (renderGallery).
-     ═══════════════════════════════════════════════════════════════════════ -->
-<div class="gallery-wrapper" id="galleryWrapper">
-  <div class="gallery" id="gallery">
-    <div class="loading-grid"><div class="spinner"></div></div>
-  </div>
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════════════════
-     BENUTZERVERWALTUNG (nur Admin)
-     Wird angezeigt wenn "Benutzer"-Tab angeklickt wird.
-     ═══════════════════════════════════════════════════════════════════════ -->
-<div class="users-wrapper" id="usersWrapper">
-  <div class="users-header">
-    <h2>Benutzerverwaltung</h2>
-    <button class="btn btn-primary" onclick="toggleNewUserForm()">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+  <!-- ══════════════════════════ LIGHTBOX ═════════════════════════════════ -->
+  <div class="lightbox" id="lightbox">
+    <button class="lb-close" onclick="closeLightbox()" title="Schliessen (ESC)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
       </svg>
-      Neuer Benutzer
+    </button>
+    <div class="lb-counter" id="lbCounter"></div>
+    <div class="lb-inner">
+      <div class="lb-img-wrap">
+        <button class="lb-nav lb-prev" onclick="lbNav(-1)" title="Vorheriges (←)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+        </button>
+        <img id="lbImg" src="" alt="">
+        <button class="lb-nav lb-next" onclick="lbNav(1)" title="Nächstes (→)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </button>
+      </div>
+      <div class="lb-meta" id="lbMeta"></div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════ FLOATING BULK BAR ════════════════════════════ -->
+  <div class="bulk-bar" id="bulkBar">
+    <span class="bulk-count"><span id="selCount">0</span> ausgewählt</span>
+    <button class="btn btn-ghost" onclick="downloadSelected()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="7 10 12 15 17 10"/>
+        <line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+      ZIP
+    </button>
+    <button class="btn btn-danger" id="bulkDeleteBtn" onclick="bulkDelete()" style="display:none">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="3 6 5 6 21 6"/>
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+      </svg>
+      Alle löschen
+    </button>
+    <button class="btn btn-ghost" onclick="clearSelection()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+      Abwählen
     </button>
   </div>
 
-  <!-- Formular: Neuen Benutzer anlegen (toggle-bar) -->
-  <div class="new-user-form" id="newUserForm">
-    <h3>Neuen Benutzer anlegen</h3>
-    <div class="form-row">
-      <div class="form-field">
+  <!-- ══════════════════════════ LOGIN MODAL ══════════════════════════════ -->
+  <div class="modal-overlay" id="loginModal" onclick="modalBgClick(event,'loginModal')">
+    <div class="modal">
+      <button class="modal-close" onclick="closeModal('loginModal')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+      <div class="modal-logo">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#c9a84c" stroke-width="1.5">
+          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+          <circle cx="12" cy="13" r="4"/>
+        </svg>
+        KVP<span class="accent">Cinematic</span>
+      </div>
+      <h2>Willkommen zurück</h2>
+      <p class="subtitle">Melde dich an um Fotos zu verwalten</p>
+      <div class="form-group">
         <label>Benutzername</label>
-        <input type="text" id="newUsername" placeholder="max.muster">
+        <input id="loginUser" type="text" placeholder="Benutzername"
+               autocomplete="username" onkeydown="if(event.key==='Enter')doLogin()">
       </div>
-      <div class="form-field">
-        <label>Anzeigename</label>
-        <input type="text" id="newDisplayName" placeholder="Max Muster">
-      </div>
-      <div class="form-field">
+      <div class="form-group">
         <label>Passwort</label>
-        <input type="password" id="newPassword" placeholder="Min. 6 Zeichen">
+        <input id="loginPass" type="password" placeholder="Passwort"
+               autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
       </div>
-      <div class="form-field">
-        <label>Rolle</label>
-        <select id="newRole">
-          <option value="viewer">Viewer – Nur ansehen</option>
-          <option value="user">User – Eigene Fotos hochladen</option>
-          <option value="admin">Admin – Alles</option>
-        </select>
-      </div>
-      <div class="form-field" style="justify-content:flex-end">
-        <button class="btn btn-primary" onclick="createUser()">Anlegen</button>
-      </div>
-    </div>
-    <div id="userFormError" style="font-size:13px;color:var(--red);margin-top:10px;display:none"></div>
-  </div>
-
-  <!-- Benutzer-Tabelle -->
-  <div class="users-table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>Benutzername</th>
-          <th>Anzeigename</th>
-          <th>Rolle</th>
-          <th>Erstellt</th>
-          <th>Aktionen</th>
-        </tr>
-      </thead>
-      <tbody id="usersTableBody">
-        <tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:24px">Wird geladen…</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════════════════
-     UPLOAD-OVERLAY
-     Erscheint während Fotos hochgeladen werden.
-     Zeigt Fortschrittsbalken + aktuellen Dateinamen.
-     ═══════════════════════════════════════════════════════════════════════ -->
-<div class="upload-overlay" id="uploadOverlay">
-  <div class="upload-modal">
-    <h3>Wird hochgeladen…</h3>
-    <p id="uploadProgress">Bitte warten</p>
-    <div class="progress-bar">
-      <div class="progress-fill" id="progressFill" style="width:0%"></div>
+      <button class="btn btn-primary" id="loginSubmitBtn" onclick="doLogin()">Anmelden</button>
+      <div class="login-error" id="loginError"></div>
     </div>
   </div>
-</div>
 
-<!-- ═══════════════════════════════════════════════════════════════════════
-     LIGHTBOX
-     Vollansicht eines Fotos. Schliesst mit Klick oder ESC.
-     ═══════════════════════════════════════════════════════════════════════ -->
-<div class="lightbox" id="lightbox" onclick="closeLightbox()">
-  <button class="btn-lightbox-close" onclick="closeLightbox()">✕</button>
-  <img id="lightboxImg" src="" alt="" onclick="event.stopPropagation()">
-  <div class="lightbox-info"   id="lightboxInfo"></div>
-  <div class="lightbox-device" id="lightboxDevice"></div>
-</div>
+  <!-- ══════════════════════════ UPLOAD MODAL ═════════════════════════════ -->
+  <div class="modal-overlay" id="uploadModal" onclick="modalBgClick(event,'uploadModal')">
+    <div class="modal" style="max-width:460px">
+      <button class="modal-close" onclick="closeModal('uploadModal')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+      <h2 style="font-family:'Playfair Display',serif;margin-bottom:6px">Fotos hochladen</h2>
+      <p class="subtitle">JPG, PNG, HEIC, WebP · GPS & EXIF werden gelesen</p>
+      <div class="drop-zone" id="dropZone" onclick="triggerFileInput()">
+        <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
+          <polyline points="16 16 12 12 8 16"/>
+          <line x1="12" y1="12" x2="12" y2="21"/>
+          <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+        </svg>
+        <p>Klicken oder Dateien hierher ziehen</p>
+        <small>Mehrfachauswahl möglich</small>
+      </div>
+      <!-- Unsichtbares file-Input — iOS Safari braucht position:absolute statt display:none -->
+      <input type="file" id="fileInput" accept="image/*" multiple
+             style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;"
+             onchange="handleFiles(this.files)">
+      <div class="upload-progress" id="uploadProgress">
+        <div class="prog-bar-wrap"><div class="prog-bar" id="progBar"></div></div>
+        <div class="prog-label" id="progLabel">Wird hochgeladen…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-wrap" id="toastWrap"></div>
 
 
-<!-- ═══════════════════════════════════════════════════════════════════════
-     JAVASCRIPT
-     ═══════════════════════════════════════════════════════════════════════ -->
-<script>
-  // ── Konfiguration ──────────────────────────────────────────────────────────
-  // Backend-URL: zeigt auf den Azure App Service
-  const API = "https://app-fotogalerie-prod-f2cha4hehrgpefbt.germanywestcentral-01.azurewebsites.net";
+  <!-- ════════════════════════════════════════════════════════════════════
+       JAVASCRIPT
+  ════════════════════════════════════════════════════════════════════ -->
+  <script>
+    // ── Konfiguration ──────────────────────────────────────────────────────
+    // Backend-URL — hier anpassen wenn sich die Azure-URL ändert
+    const API_URL = "https://app-fotogalerie-prod-f2cha4hehrgpefbt.germanywestcentral-01.azurewebsites.net";
 
-  // ── Globaler Zustand ───────────────────────────────────────────────────────
-  let authHeader = "";    // HTTP Basic Auth Header (Base64)
-  let currentUser = null; // {id, username, role, display_name}
+    // ── State ──────────────────────────────────────────────────────────────
+    let currentUser   = null;   // {id, username, role, display_name} oder null
+    let authHeader    = null;   // "Basic base64(user:pass)" oder null
+    let allPhotos     = [];     // Aktuell geladene Fotos
+    let selectedIds   = new Set(); // IDs der ausgewählten Fotos
+    let lbIndex       = 0;     // Aktiver Lightbox-Index
+    let favOnly       = false;  // Favoriten-Filter aktiv?
+    let adminOpen     = false;  // Admin-Panel sichtbar?
 
-  // Blob-URLs für Bilder: Map<photo_id → objectURL>
-  // Werden beim Logout freigegeben um Speicher zu schonen
-  const blobUrls = new Map();
-
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // AUTHENTIFIZIERUNG
-  // ═══════════════════════════════════════════════════════════════════════
-
-  /**
-   * Login: Credentials werden als HTTP Basic Auth Header kodiert.
-   * Test-Request an /api/me → bei Erfolg: App laden, Rolle bestimmen.
-   */
-  function doLogin() {
-    const u = document.getElementById("loginUser").value.trim();
-    const p = document.getElementById("loginPass").value;
-    if (!u || !p) return;
-
-    // Base64-Kodierung: "username:password" → "Basic dXNlcjpwYXNz"
-    authHeader = "Basic " + btoa(u + ":" + p);
-
-    // Benutzerinfo laden (inkl. Rolle)
-    // Timeout nach 8 Sekunden → App möglicherweise nicht erreichbar
-    const controller = new AbortController();
-    const timeout    = setTimeout(() => controller.abort(), 8000);
-
-    fetch(`${API}/api/me`, {
-      headers: { "Authorization": authHeader },
-      signal: controller.signal
-    })
-      .then(async r => {
-        clearTimeout(timeout);
-        if (r.status === 401) {
-          // Falsches Passwort / Benutzername nicht vorhanden
-          showLoginError("Falscher Benutzername oder Passwort");
-          authHeader = "";
-        } else if (!r.ok) {
-          // Server antwortet, aber mit Fehler (z.B. 500)
-          showLoginError("Server-Fehler. Bitte später versuchen.");
-          authHeader = "";
-        } else {
-          currentUser = await r.json();
-          document.getElementById("loginOverlay").classList.add("hidden");
-          document.getElementById("loginError").style.display = "none";
-          setupUI();   // UI an Rolle anpassen
-          init();      // Daten laden
+    // ── Start ──────────────────────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', async () => {
+      // Login aus sessionStorage wiederherstellen
+      const stored = sessionStorage.getItem('kvp_auth');
+      if (stored) {
+        authHeader  = stored;
+        currentUser = await fetchMe();
+        if (!currentUser) {
+          authHeader = null;
+          sessionStorage.removeItem('kvp_auth');
         }
-      })
-      .catch(err => {
-        clearTimeout(timeout);
-        authHeader = "";
-        // Unterscheide zwischen Timeout (App down) und Netzwerkfehler
-        if (err.name === "AbortError") {
-          showLoginError("⚠️ WebApp nicht erreichbar. Bitte den IT kontaktieren.");
-        } else {
-          showLoginError("⚠️ Verbindung fehlgeschlagen. WebApp möglicherweise nicht aktiv.");
-        }
-      });
-  }
-
-  /** Zeigt eine Fehlermeldung im Login-Formular an. */
-  function showLoginError(msg) {
-    const el = document.getElementById("loginError");
-    el.textContent   = msg;
-    el.style.display = "block";
-  }
-
-  /**
-   * Logout: Auth-Header + Benutzerinfos löschen, Blob-URLs freigeben.
-   */
-  function doLogout() {
-    blobUrls.forEach(url => URL.revokeObjectURL(url));
-    blobUrls.clear();
-    authHeader  = "";
-    currentUser = null;
-    document.getElementById("loginUser").value = "";
-    document.getElementById("loginPass").value = "";
-    document.getElementById("loginOverlay").classList.remove("hidden");
-    document.getElementById("gallery").innerHTML = '<div class="loading-grid"><div class="spinner"></div></div>';
-    // Benutzer-Tab beim Ausloggen wieder verstecken (wichtig bei Rollenwechsel)
-    document.getElementById("tabUsers").classList.add("hidden");
-    document.getElementById("uploadLabel").style.display = "";
-    showGallery();  // zurück zur Galerie-Ansicht
-  }
-
-  /**
-   * Hilfsfunktion: fetch() immer mit Authorization-Header senden.
-   */
-  function authFetch(url, options = {}) {
-    return fetch(url, {
-      ...options,
-      headers: { ...options.headers, "Authorization": authHeader }
+      }
+      renderHeader();
+      await Promise.all([loadFilters(), loadGallery()]);
+      initDragDrop();
+      initKeyboard();
     });
-  }
 
-  /**
-   * UI nach dem Login an die Benutzer-Rolle anpassen.
-   * - admin:  Alle Buttons sichtbar, Benutzer-Tab sichtbar
-   * - user:   Upload sichtbar, kein Benutzer-Tab, kein Löschen
-   * - viewer: Kein Upload, kein Benutzer-Tab, kein Löschen
-   */
-  function setupUI() {
-    if (!currentUser) return;
-    const { role, display_name, username } = currentUser;
-
-    // Benutzer-Info im Header
-    document.getElementById("headerUserInfo").textContent = display_name || username;
-    const badge = document.getElementById("headerRoleBadge");
-    badge.textContent = role;
-    badge.className   = `role-badge ${role}`;
-
-    // Benutzer-Tab (nur Admin)
-    if (role === "admin") {
-      document.getElementById("tabUsers").classList.remove("hidden");
+    // ── Auth Helper ────────────────────────────────────────────────────────
+    /**
+     * fetch() mit optionalem Authorization-Header.
+     * Content-Type wird NICHT gesetzt (wichtig für FormData-Uploads!).
+     */
+    async function authFetch(path, opts = {}) {
+      const headers = { ...(opts.headers || {}) };
+      if (authHeader) headers['Authorization'] = authHeader;
+      return fetch(API_URL + path, { ...opts, headers });
     }
 
-    // Upload-Button (viewer hat keinen Upload)
-    document.getElementById("uploadLabel").style.display =
-      role === "viewer" ? "none" : "";
-  }
-
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // INITIALISIERUNG
-  // ═══════════════════════════════════════════════════════════════════════
-
-  /**
-   * Lädt alle Daten parallel: Orte, Geräte, Fotos.
-   */
-  async function init() {
-    await Promise.all([loadLocations(), loadDevices(), loadPhotos()]);
-  }
-
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // NAVIGATION (Galerie / Benutzer)
-  // ═══════════════════════════════════════════════════════════════════════
-
-  function showGallery() {
-    document.getElementById("galleryWrapper").style.display = "block";
-    document.getElementById("usersWrapper").classList.remove("active");
-    document.getElementById("toolbar").style.display = "";
-    document.getElementById("tabGallery").classList.add("active");
-    document.getElementById("tabUsers").classList.remove("active");
-  }
-
-  function showUsers() {
-    document.getElementById("galleryWrapper").style.display = "none";
-    document.getElementById("usersWrapper").classList.add("active");
-    document.getElementById("toolbar").style.display = "none";
-    document.getElementById("tabGallery").classList.remove("active");
-    document.getElementById("tabUsers").classList.add("active");
-    loadUsers();
-  }
-
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // STATUS-MELDUNGEN
-  // ═══════════════════════════════════════════════════════════════════════
-
-  /**
-   * Zeigt eine Meldung in der Toolbar an.
-   * @param {string} msg   – Anzuzeigender Text
-   * @param {string} type  – "loading" | "success" | "error"
-   */
-  function setStatus(msg, type = "loading") {
-    const el = document.getElementById("status");
-    el.textContent = msg; el.className = type;
-    if (type !== "loading") {
-      setTimeout(() => { el.className = ""; el.textContent = ""; }, 4000);
-    }
-  }
-
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // FILTER-DROPDOWNS
-  // ═══════════════════════════════════════════════════════════════════════
-
-  /**
-   * Lädt alle verfügbaren Orte aus der API und befüllt den Location-Dropdown.
-   * Gruppiert nach Land (als <optgroup>) und zeigt Städte darunter.
-   */
-  async function loadLocations() {
-    try {
-      const locs = await (await authFetch(`${API}/api/locations`)).json();
-      const sel  = document.getElementById("filterLocation");
-      sel.innerHTML = '<option value="">Alle Orte</option>';
-
-      // Länder als Gruppe
-      const countries = [...new Set(locs.map(l => l.country))].filter(Boolean);
-      if (countries.length) {
-        const g = document.createElement("optgroup"); g.label = "Nach Land";
-        countries.forEach(c => {
-          const o = document.createElement("option");
-          o.value = `country:${c}`; o.text = `${c}`; g.appendChild(o);
-        });
-        sel.appendChild(g);
-      }
-      // Städte als Gruppe
-      const cities = locs.filter(l => l.city);
-      if (cities.length) {
-        const g = document.createElement("optgroup"); g.label = "Nach Stadt";
-        cities.forEach(l => {
-          const o = document.createElement("option");
-          o.value = `city:${l.city}`; o.text = `${l.city}, ${l.country}`; g.appendChild(o);
-        });
-        sel.appendChild(g);
-      }
-      document.getElementById("locationCount").textContent = locs.length;
-    } catch(e) { console.error("loadLocations:", e); }
-  }
-
-  /**
-   * Lädt alle verfügbaren Geräte aus der API und befüllt den Device-Dropdown.
-   */
-  async function loadDevices() {
-    try {
-      const devs = await (await authFetch(`${API}/api/devices`)).json();
-      const sel  = document.getElementById("filterDevice");
-      sel.innerHTML = '<option value="">Alle Geräte</option>';
-      devs.forEach(d => {
-        const o = document.createElement("option");
-        o.value = d.device; o.text = d.device; sel.appendChild(o);
-      });
-      document.getElementById("deviceCount").textContent = devs.length;
-    } catch(e) { console.error("loadDevices:", e); }
-  }
-
-  /**
-   * Liest die aktuellen Filter aus den Dropdowns und lädt die Fotos neu.
-   */
-  function applyFilter() {
-    const loc     = document.getElementById("filterLocation").value;
-    const dev     = document.getElementById("filterDevice").value;
-    let city = "", country = "";
-    if (loc.startsWith("city:"))    city    = loc.slice(5);
-    if (loc.startsWith("country:")) country = loc.slice(8);
-    loadPhotos(city, country, dev);
-  }
-
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // FOTOS LADEN & RENDERN
-  // ═══════════════════════════════════════════════════════════════════════
-
-  /**
-   * Lädt Fotos vom Backend (optional mit Filtern) und rendert die Galerie.
-   */
-  async function loadPhotos(city = "", country = "", device = "") {
-    document.getElementById("gallery").innerHTML =
-      '<div class="loading-grid"><div class="spinner"></div></div>';
-    try {
-      let url    = `${API}/api/photos`;
-      const p    = [];
-      if (city)    p.push(`city=${encodeURIComponent(city)}`);
-      if (country) p.push(`country=${encodeURIComponent(country)}`);
-      if (device)  p.push(`device=${encodeURIComponent(device)}`);
-      if (p.length) url += "?" + p.join("&");
-
-      const photos = await (await authFetch(url)).json();
-      document.getElementById("photoCount").textContent = photos.length;
-      renderGallery(photos);
-    } catch(e) {
-      document.getElementById("gallery").innerHTML = `
-        <div class="empty-state">
-          <div class="icon">⚠️</div>
-          <h3>Verbindungsfehler</h3>
-          <p>API nicht erreichbar. Bitte App Service prüfen.</p>
-        </div>`;
-    }
-  }
-
-  /**
-   * Rendert die Galerie aus einem Array von Foto-Objekten.
-   * Bilder werden asynchron über den Backend-Proxy geladen (loadImage).
-   * Admin-Benutzer sehen einen Löschen-Button auf jeder Karte.
-   */
-  function renderGallery(photos) {
-    const g   = document.getElementById("gallery");
-    const isAdmin = currentUser?.role === "admin";
-
-    if (!photos.length) {
-      g.innerHTML = `
-        <div class="empty-state">
-          <div class="icon">📷</div>
-          <h3>Noch keine Fotos</h3>
-          <p>Lade dein erstes Foto hoch!</p>
-        </div>`;
-      return;
+    async function fetchMe() {
+      try {
+        const r = await authFetch('/api/me');
+        return r.ok ? r.json() : null;
+      } catch { return null; }
     }
 
-    // HTML für alle Karten generieren (Bilder werden später asynchron geladen)
-    g.innerHTML = photos.map(p => `
-      <div class="photo-card" id="card-${p.id}" onclick="toggleSelect(event,${p.id})">
+    // ── Header ────────────────────────────────────────────────────────────
+    function renderHeader() {
+      const hr  = document.getElementById('headerRight');
+      const ab  = document.getElementById('actionBtns');
 
-        <!-- Checkbox für Mehrfachauswahl -->
-        <input type="checkbox" class="card-checkbox" data-id="${p.id}"
-               onclick="event.stopPropagation()" onchange="onCheckbox(${p.id},this)">
-
-        <!-- Löschen-Button (nur Admin, erscheint beim Hovern) -->
-        <button class="btn-delete-card ${isAdmin ? '' : 'hidden'}"
-                onclick="event.stopPropagation();deletePhoto(${p.id},'${esc(p.filename)}')"
-                title="Foto löschen">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-            <polyline points="3 6 5 6 21 6"/>
-            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-            <path d="M10 11v6M14 11v6"/>
-            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-          </svg>
-        </button>
-
-        <!-- Bildbereich mit Lade-Spinner -->
-        <div class="photo-thumb">
-          <div class="thumb-placeholder" id="ph-${p.id}">
-            <div class="mini-spinner"></div>
-          </div>
-          <img id="img-${p.id}" src="" alt="${esc(p.filename)}"
-               onclick="event.stopPropagation();
-                        openLightbox(${p.id},'${esc(p.filename)}',
-                          '${esc(p.city||'')}','${esc(p.country||'')}',
-                          '${esc(p.device||'')}')">
-        </div>
-
-        <!-- Karten-Info -->
-        <div class="card-info">
-          <div class="card-filename">${esc(p.filename)}</div>
-          ${p.city
-            ? `<div class="card-location">📍 ${esc(p.city)}, ${esc(p.country)}</div>`
-            : '<div class="card-location no-loc">Kein Standort</div>'}
-          ${p.device
-            ? `<div class="card-device">${esc(p.device)}</div>`
-            : ''}
-          ${isAdmin && p.uploader
-            ? `<div class="card-uploader">↑ ${esc(p.uploader)}</div>`
-            : ''}
-        </div>
-      </div>`).join("");
-
-    // Alle Bilder asynchron über Backend-Proxy laden
-    photos.forEach(p => loadImage(p.id));
-    updateSelectedCount();
-  }
-
-  /**
-   * Lädt ein einzelnes Bild über den authentifizierten Backend-Proxy.
-   * Da <img src> keine Auth-Header senden kann, nutzen wir fetch() + createObjectURL().
-   * Gecachte Blob-URLs werden wiederverwendet (kein doppelter Download).
-   */
-  async function loadImage(id) {
-    try {
-      // Falls Bild bereits geladen: Blob-URL wiederverwenden
-      if (blobUrls.has(id)) {
-        applyBlobUrl(id, blobUrls.get(id));
+      if (!currentUser) {
+        // Nicht eingeloggt → nur "Anmelden"-Button
+        hr.innerHTML = `
+          <button class="btn btn-primary" onclick="openModal('loginModal')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+            Anmelden
+          </button>`;
+        ab.style.display = 'none';
         return;
       }
-      // Bild mit Auth vom Backend laden
-      const res  = await authFetch(`${API}/api/photos/${id}/image`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
-      const url  = URL.createObjectURL(blob);  // Temporäre Browser-URL
-      blobUrls.set(id, url);
-      applyBlobUrl(id, url);
-    } catch(e) {
-      // Fehler-Placeholder anzeigen
-      const ph = document.getElementById(`ph-${id}`);
-      if (ph) ph.innerHTML = '<span style="font-size:28px;opacity:.25">📷</span>';
-      console.warn(`Bild ${id} konnte nicht geladen werden:`, e);
+
+      // Eingeloggt → Badge + Name + Abmelden
+      const roleClass = { admin:'badge-admin', user:'badge-user', viewer:'badge-viewer' };
+      hr.innerHTML = `
+        <span class="badge-role ${roleClass[currentUser.role]||'badge-viewer'}">
+          ${esc(currentUser.role)}
+        </span>
+        <span class="user-name">${esc(currentUser.display_name||currentUser.username)}</span>
+        <button class="btn btn-ghost" onclick="doLogout()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+          Abmelden
+        </button>`;
+
+      ab.style.display = 'flex';
+      const canUp = currentUser.role === 'admin' || currentUser.role === 'user';
+      const isAdm = currentUser.role === 'admin';
+      document.getElementById('uploadBtn').style.display = canUp ? 'inline-flex' : 'none';
+      document.getElementById('adminBtn').style.display  = isAdm ? 'inline-flex' : 'none';
+      document.getElementById('bulkDeleteBtn').style.display = isAdm ? 'inline-flex' : 'none';
     }
-  }
 
-  /** Setzt die Blob-URL auf das <img> Element und blendet Spinner aus. */
-  function applyBlobUrl(id, url) {
-    const img = document.getElementById(`img-${id}`);
-    const ph  = document.getElementById(`ph-${id}`);
-    if (img) {
-      img.src    = url;
-      img.onload = () => { img.classList.add("loaded"); if (ph) ph.classList.add("hidden"); };
-    }
-  }
+    // ── Galerie laden & rendern ────────────────────────────────────────────
+    async function loadGallery() {
+      const g = document.getElementById('gallery');
+      g.innerHTML = '<div class="gallery-state"><div class="spinner"></div><p>Galerie wird geladen…</p></div>';
 
-  /** HTML-Sonderzeichen escapen für sichere Template-Strings. */
-  function esc(str) {
-    return String(str || "")
-      .replace(/&/g,"&amp;").replace(/</g,"&lt;")
-      .replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
-  }
+      const city    = document.getElementById('filterCity').value;
+      const country = document.getElementById('filterCountry').value;
+      const device  = document.getElementById('filterDevice').value;
 
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // UPLOAD – Kombinierter Select + Auto-Upload
-  // ═══════════════════════════════════════════════════════════════════════
-
-  /**
-   * Öffnet den Datei-Picker per JavaScript.
-   * Zuverlässiger als label+for auf iOS Safari / Android Chrome.
-   * Muss direkt in einem User-Interaction-Handler aufgerufen werden (onclick).
-   */
-  function triggerFileInput() {
-    document.getElementById("fileInput").click();
-  }
-
-  /**
-   * Wird direkt aufgerufen wenn der Benutzer Dateien ausgewählt hat.
-   * Zeigt Upload-Overlay → lädt alle Dateien hoch → aktualisiert Galerie.
-   */
-  async function autoUpload() {
-    const input = document.getElementById("fileInput");
-    const files = Array.from(input.files);
-    if (!files.length) return;
-
-    const overlay      = document.getElementById("uploadOverlay");
-    const progressText = document.getElementById("uploadProgress");
-    const progressFill = document.getElementById("progressFill");
-
-    overlay.classList.add("active");  // Overlay einblenden
-    let done = 0, errors = 0;
-
-    for (const file of files) {
-      progressText.textContent = `${done + 1} von ${files.length}: ${file.name}`;
-      progressFill.style.width = `${(done / files.length) * 100}%`;
-
-      const fd = new FormData();
-      fd.append("photo", file);  // Multipart-Upload
+      let url = '/api/photos?';
+      if (city)    url += `city=${encodeURIComponent(city)}&`;
+      if (country) url += `country=${encodeURIComponent(country)}&`;
+      if (device)  url += `device=${encodeURIComponent(device)}&`;
+      if (favOnly) url += 'favorites_only=true&';
 
       try {
-        const res = await authFetch(`${API}/api/photos`, { method: "POST", body: fd });
-        if (!res.ok) errors++;
-      } catch(e) {
-        errors++;
-        console.error(`Upload-Fehler ${file.name}:`, e);
-      }
-      done++;
-    }
-
-    progressFill.style.width = "100%";
-    overlay.classList.remove("active");
-    input.value = "";  // File-Input zurücksetzen
-
-    const msg = errors > 0
-      ? `${done - errors} hochgeladen, ${errors} fehlgeschlagen`
-      : `✓ ${done} Foto${done !== 1 ? "s" : ""} hochgeladen`;
-    setStatus(msg, errors > 0 ? "error" : "success");
-
-    // Galerie und Filter-Dropdowns neu laden
-    await Promise.all([loadPhotos(), loadLocations(), loadDevices()]);
-  }
-
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // AUSWAHL (Checkboxen)
-  // ═══════════════════════════════════════════════════════════════════════
-
-  /** Klick auf Karte → Checkbox umschalten. */
-  function toggleSelect(event, id) {
-    const cb = document.querySelector(`.card-checkbox[data-id="${id}"]`);
-    if (!cb) return;
-    cb.checked = !cb.checked;
-    onCheckbox(id, cb);
-  }
-
-  /** Checkbox-Zustand → Goldrahmen auf Karte setzen/entfernen. */
-  function onCheckbox(id, cb) {
-    document.getElementById(`card-${id}`)
-      ?.classList.toggle("selected", cb.checked);
-    updateSelectedCount();
-  }
-
-  function selectAll() {
-    document.querySelectorAll(".card-checkbox").forEach(cb => {
-      cb.checked = true;
-      document.getElementById(`card-${cb.dataset.id}`)?.classList.add("selected");
-    });
-    updateSelectedCount();
-  }
-
-  function deselectAll() {
-    document.querySelectorAll(".card-checkbox").forEach(cb => {
-      cb.checked = false;
-      document.getElementById(`card-${cb.dataset.id}`)?.classList.remove("selected");
-    });
-    updateSelectedCount();
-  }
-
-  function updateSelectedCount() {
-    const n = document.querySelectorAll(".card-checkbox:checked").length;
-    document.getElementById("selectedCount").textContent = n > 0 ? `${n} ausgewählt` : "";
-  }
-
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // FOTO LÖSCHEN
-  // ═══════════════════════════════════════════════════════════════════════
-
-  /**
-   * Löscht ein Foto nach Bestätigung.
-   * Nur Admins dürfen diese Funktion aufrufen (Button ist nur für Admin sichtbar).
-   * @param {number} id       – Photo-ID
-   * @param {string} filename – Dateiname (für Bestätigungsdialog)
-   */
-  async function deletePhoto(id, filename) {
-    if (!confirm(`Foto wirklich löschen?\n\n${filename}\n\nDiese Aktion kann nicht rückgängig gemacht werden.`))
-      return;
-
-    try {
-      const res = await authFetch(`${API}/api/photos/${id}`, { method: "DELETE" });
-      if (res.ok) {
-        // Blob-URL freigeben und Karte aus DOM entfernen
-        if (blobUrls.has(id)) {
-          URL.revokeObjectURL(blobUrls.get(id));
-          blobUrls.delete(id);
+        const r = await authFetch(url);
+        if (r.ok) {
+          const data = await r.json();
+          allPhotos  = Array.isArray(data) ? data : [];
+        } else {
+          allPhotos = [];
         }
-        document.getElementById(`card-${id}`)?.remove();
-        const count = parseInt(document.getElementById("photoCount").textContent) || 1;
-        document.getElementById("photoCount").textContent = Math.max(0, count - 1);
-        setStatus("Foto gelöscht", "success");
-      } else {
-        const err = await res.json();
-        setStatus(err.error || "Löschen fehlgeschlagen", "error");
-      }
-    } catch(e) {
-      setStatus("Verbindungsfehler beim Löschen", "error");
-    }
-  }
-
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // ZIP-DOWNLOAD
-  // ═══════════════════════════════════════════════════════════════════════
-
-  /**
-   * Lädt alle ausgewählten Fotos als ZIP-Datei herunter.
-   */
-  async function downloadSelected() {
-    const ids = [...document.querySelectorAll(".card-checkbox:checked")]
-                  .map(c => +c.dataset.id);
-    if (!ids.length) { setStatus("Bitte Fotos auswählen", "error"); return; }
-
-    setStatus("ZIP wird erstellt…", "loading");
-    try {
-      const res  = await authFetch(`${API}/api/download`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids })
-      });
-      const blob = await res.blob();
-      // Temporären Link erstellen und klicken → Browser-Download
-      const a    = document.createElement("a");
-      a.href     = URL.createObjectURL(blob);
-      a.download = "kvp-portfolio.zip";
-      a.click();
-      URL.revokeObjectURL(a.href);
-      setStatus(`✓ ${ids.length} Foto${ids.length !== 1 ? "s" : ""} heruntergeladen`, "success");
-    } catch(e) {
-      setStatus("ZIP-Download fehlgeschlagen", "error");
-    }
-  }
-
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // LIGHTBOX
-  // ═══════════════════════════════════════════════════════════════════════
-
-  /**
-   * Öffnet die Lightbox mit dem Foto in voller Grösse.
-   * Nutzt gecachte Blob-URL oder lädt das Bild neu.
-   */
-  function openLightbox(id, filename, city, country, device) {
-    const img = document.getElementById("lightboxImg");
-    img.src   = "";  // Altes Bild entfernen
-
-    // Gecachte Blob-URL verwenden → kein erneuter Download
-    if (blobUrls.has(id)) {
-      img.src = blobUrls.get(id);
-    } else {
-      authFetch(`${API}/api/photos/${id}/image`)
-        .then(r => r.blob())
-        .then(blob => { img.src = URL.createObjectURL(blob); });
-    }
-
-    document.getElementById("lightboxInfo").textContent =
-      city ? `📍 ${city}, ${country}  ·  ${filename}` : filename;
-    document.getElementById("lightboxDevice").textContent = device || "";
-    document.getElementById("lightbox").classList.add("active");
-  }
-
-  function closeLightbox() {
-    document.getElementById("lightbox").classList.remove("active");
-  }
-
-  // ESC-Taste schliesst die Lightbox
-  document.addEventListener("keydown", e => { if (e.key === "Escape") closeLightbox(); });
-
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // BENUTZERVERWALTUNG (Admin)
-  // ═══════════════════════════════════════════════════════════════════════
-
-  /** Lädt alle Benutzer aus der API und rendert die Tabelle. */
-  async function loadUsers() {
-    const tbody = document.getElementById("usersTableBody");
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:24px">Wird geladen…</td></tr>';
-    try {
-      const users = await (await authFetch(`${API}/api/users`)).json();
-      if (!users.length) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:24px">Keine Benutzer</td></tr>';
+      } catch(e) {
+        g.innerHTML = `<div class="gallery-state">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"
+               style="margin:0 auto 14px;opacity:.25">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <p>Galerie konnte nicht geladen werden</p>
+          <small>${esc(e.message)}</small>
+        </div>`;
+        document.getElementById('photoCounter').textContent = '';
         return;
       }
-      tbody.innerHTML = users.map(u => `
-        <tr id="user-row-${u.id}">
-          <td><strong>${esc(u.username)}</strong></td>
-          <td>${esc(u.display_name || "–")}</td>
-          <td><span class="badge ${u.role}">${u.role}</span></td>
-          <td style="color:var(--text-muted);font-size:12px">${u.created_at.slice(0,10)}</td>
-          <td>
-            ${u.id !== currentUser?.id
-              ? `<button class="btn btn-danger" style="font-size:12px;padding:5px 12px"
-                         onclick="deleteUser(${u.id},'${esc(u.username)}')">
-                   Löschen
+
+      renderGallery();
+      const n = allPhotos.length;
+      document.getElementById('photoCounter').textContent =
+        n === 0 ? 'Noch keine Fotos' : `${n} Foto${n!==1?'s':''}`;
+    }
+
+    function renderGallery() {
+      const g = document.getElementById('gallery');
+      g.innerHTML = '';
+      if (allPhotos.length === 0) {
+        g.innerHTML = `<div class="gallery-state">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"
+               style="margin:0 auto 16px;opacity:.18">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+            <circle cx="12" cy="13" r="4"/>
+          </svg>
+          <p>Noch keine Fotos vorhanden</p>
+          <small>Lade dein erstes Foto hoch um loszulegen</small>
+        </div>`;
+        return;
+      }
+      allPhotos.forEach((p, idx) => g.appendChild(buildCard(p, idx)));
+    }
+
+    /** Baut eine einzelne Foto-Karte */
+    function buildCard(photo, idx) {
+      const card = document.createElement('div');
+      card.className = 'photo-card' + (selectedIds.has(photo.id) ? ' selected' : '');
+      card.dataset.id = photo.id;
+
+      const loggedIn  = !!currentUser;
+      const isAdmin   = currentUser?.role === 'admin';
+      const isFav     = !!photo.is_favorite;
+      const isSel     = selectedIds.has(photo.id);
+      const locStr    = [photo.city, photo.country].filter(Boolean).join(', ');
+      const camStr    = photo.device || '';
+
+      card.innerHTML = `
+        <img src="${API_URL}/api/photos/${photo.id}/image"
+             loading="lazy" alt="${esc(photo.filename)}"
+             onclick="openLightbox(${idx})"
+             onerror="this.style.minHeight='180px';this.style.background='var(--surface2)'">
+        <div class="photo-overlay">
+          <div class="overlay-top">
+            ${loggedIn
+              ? `<button class="btn-ov btn-ov-select${isSel?' active':''}"
+                         onclick="event.stopPropagation();toggleSelect(${photo.id})"
+                         title="Auswählen">
+                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                     <polyline points="20 6 9 17 4 12"/>
+                   </svg>
                  </button>`
-              : '<span style="font-size:12px;color:var(--text-muted)">(Du)</span>'}
-          </td>
-        </tr>`).join("");
-    } catch(e) {
-      tbody.innerHTML = `<tr><td colspan="5" style="color:var(--red);padding:16px">Fehler: ${e.message}</td></tr>`;
+              : '<div class="ov-spacer"></div>'}
+            ${loggedIn
+              ? `<button class="btn-ov btn-ov-fav${isFav?' active':''}"
+                         onclick="event.stopPropagation();toggleFav(${photo.id},this)"
+                         title="${isFav?'Aus Favoriten':'Zu Favoriten'}">
+                   <svg viewBox="0 0 24 24"
+                        fill="${isFav?'currentColor':'none'}"
+                        stroke="currentColor" stroke-width="2">
+                     <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67
+                              l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78
+                              l1.06 1.06L12 21.23l7.78-7.78
+                              1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                   </svg>
+                 </button>`
+              : ''}
+          </div>
+          <div class="overlay-bottom">
+            <div class="overlay-info" onclick="openLightbox(${idx})">
+              ${locStr ? `<span class="info-loc">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                  <circle cx="12" cy="10" r="3"/>
+                </svg>${esc(locStr)}</span>` : ''}
+              ${camStr ? `<span class="info-cam">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                  <circle cx="12" cy="13" r="4"/>
+                </svg>${esc(camStr)}</span>` : ''}
+            </div>
+            ${isAdmin
+              ? `<button class="btn-ov btn-ov-delete"
+                         onclick="event.stopPropagation();deleteSingle(${photo.id})"
+                         title="Foto löschen">
+                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                     <polyline points="3 6 5 6 21 6"/>
+                     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4
+                              a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                   </svg>
+                 </button>`
+              : ''}
+          </div>
+        </div>`;
+      return card;
     }
-  }
 
-  /** Zeigt/versteckt das "Neuer Benutzer"-Formular. */
-  function toggleNewUserForm() {
-    const form = document.getElementById("newUserForm");
-    form.classList.toggle("active");
-    document.getElementById("userFormError").style.display = "none";
-  }
-
-  /** Legt einen neuen Benutzer an und aktualisiert die Tabelle. */
-  async function createUser() {
-    const errEl = document.getElementById("userFormError");
-    errEl.style.display = "none";
-
-    const body = {
-      username:     document.getElementById("newUsername").value.trim(),
-      password:     document.getElementById("newPassword").value,
-      role:         document.getElementById("newRole").value,
-      display_name: document.getElementById("newDisplayName").value.trim()
-    };
-
-    if (!body.username || !body.password) {
-      errEl.textContent   = "Benutzername und Passwort sind erforderlich.";
-      errEl.style.display = "block";
-      return;
+    // ── Filter ────────────────────────────────────────────────────────────
+    async function loadFilters() {
+      try {
+        const [lr, dr] = await Promise.all([authFetch('/api/locations'), authFetch('/api/devices')]);
+        const locs = await lr.json();
+        const devs = await dr.json();
+        const cityEl    = document.getElementById('filterCity');
+        const countryEl = document.getElementById('filterCountry');
+        const deviceEl  = document.getElementById('filterDevice');
+        [...new Set(locs.map(l=>l.city).filter(Boolean))].sort()
+          .forEach(c => cityEl.innerHTML += `<option value="${esc(c)}">${esc(c)}</option>`);
+        [...new Set(locs.map(l=>l.country).filter(Boolean))].sort()
+          .forEach(c => countryEl.innerHTML += `<option value="${esc(c)}">${esc(c)}</option>`);
+        devs.forEach(d => deviceEl.innerHTML += `<option value="${esc(d.device)}">${esc(d.device)}</option>`);
+      } catch(e) { console.warn('[Filter]', e); }
     }
 
-    try {
-      const res  = await authFetch(`${API}/api/users`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
+    function toggleFavFilter() {
+      favOnly = !favOnly;
+      document.getElementById('favFilterBtn').classList.toggle('active', favOnly);
+      loadGallery();
+    }
+    function resetFilters() {
+      ['filterCity','filterCountry','filterDevice'].forEach(id => document.getElementById(id).value = '');
+      favOnly = false;
+      document.getElementById('favFilterBtn').classList.remove('active');
+      loadGallery();
+    }
+
+    // ── Login / Logout ─────────────────────────────────────────────────────
+    async function doLogin() {
+      const un  = document.getElementById('loginUser').value.trim();
+      const pw  = document.getElementById('loginPass').value;
+      const btn = document.getElementById('loginSubmitBtn');
+      const err = document.getElementById('loginError');
+      if (!un || !pw) { showLoginErr('Benutzernamen und Passwort eingeben.'); return; }
+
+      btn.textContent = 'Anmelden…';
+      btn.disabled    = true;
+      err.classList.remove('show');
+
+      const tentHeader = 'Basic ' + btoa(unescape(encodeURIComponent(un + ':' + pw)));
+      try {
+        const ctrl = new AbortController();
+        const tid  = setTimeout(() => ctrl.abort(), 8000);
+        const r    = await fetch(API_URL + '/api/me', {
+          headers: { Authorization: tentHeader }, signal: ctrl.signal
+        });
+        clearTimeout(tid);
+
+        if (r.ok) {
+          authHeader  = tentHeader;
+          currentUser = await r.json();
+          sessionStorage.setItem('kvp_auth', authHeader);
+          closeModal('loginModal');
+          document.getElementById('loginPass').value = '';
+          renderHeader();
+          await loadGallery();
+          toast('success', `Willkommen, ${currentUser.display_name||currentUser.username}! 👋`);
+          if (currentUser.role === 'admin') loadUsers();
+        } else if (r.status === 401) {
+          showLoginErr('Falscher Benutzername oder Passwort.');
+        } else {
+          showLoginErr(`Server-Fehler (${r.status}).`);
+        }
+      } catch(e) {
+        showLoginErr(e.name === 'AbortError'
+          ? 'Server antwortet nicht. Ist die App gestartet?'
+          : 'Keine Verbindung zum Server.');
+      } finally {
+        btn.textContent = 'Anmelden';
+        btn.disabled    = false;
+      }
+    }
+    function showLoginErr(msg) {
+      const el = document.getElementById('loginError');
+      el.textContent = msg;
+      el.classList.add('show');
+    }
+    function doLogout() {
+      authHeader = null; currentUser = null;
+      sessionStorage.removeItem('kvp_auth');
+      clearSelection();
+      document.getElementById('adminSection').classList.remove('show');
+      adminOpen = false;
+      renderHeader();
+      loadGallery();
+      toast('info', 'Erfolgreich abgemeldet.');
+    }
+
+    // ── Upload ────────────────────────────────────────────────────────────
+    function openUploadModal() { openModal('uploadModal'); document.getElementById('uploadProgress').classList.remove('show'); }
+    function triggerFileInput() { const i = document.getElementById('fileInput'); i.value=''; i.click(); }
+
+    function initDragDrop() {
+      const zone = document.getElementById('dropZone');
+      if (!zone) return;
+      zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('drag-over'); });
+      zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+      zone.addEventListener('drop',      e => {
+        e.preventDefault(); zone.classList.remove('drag-over');
+        if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
       });
-      const data = await res.json();
-      if (!res.ok) {
-        errEl.textContent   = data.error || "Fehler beim Anlegen";
-        errEl.style.display = "block";
-        return;
-      }
-      // Formular zurücksetzen und Tabelle neu laden
-      document.getElementById("newUsername").value     = "";
-      document.getElementById("newPassword").value     = "";
-      document.getElementById("newDisplayName").value  = "";
-      document.getElementById("newUserForm").classList.remove("active");
-      loadUsers();
-    } catch(e) {
-      errEl.textContent   = "Verbindungsfehler";
-      errEl.style.display = "block";
     }
-  }
 
-  /**
-   * Benutzer löschen (nach Bestätigung).
-   * Entfernt die Zeile aus der Tabelle ohne Seite neu zu laden.
-   */
-  async function deleteUser(id, username) {
-    if (!confirm(`Benutzer "${username}" wirklich löschen?\n\nDie Fotos bleiben erhalten.`))
-      return;
+    async function handleFiles(files) {
+      if (!files||!files.length) return;
+      if (!currentUser) { openModal('loginModal'); return; }
+      if (currentUser.role === 'viewer') { toast('error','Viewer können keine Fotos hochladen.'); return; }
 
-    try {
-      const res = await authFetch(`${API}/api/users/${id}`, { method: "DELETE" });
-      if (res.ok) {
-        document.getElementById(`user-row-${id}`)?.remove();
-      } else {
-        const err = await res.json();
-        alert(err.error || "Löschen fehlgeschlagen");
+      const prog  = document.getElementById('uploadProgress');
+      const bar   = document.getElementById('progBar');
+      const label = document.getElementById('progLabel');
+      prog.classList.add('show');
+
+      let ok = 0, fail = 0;
+      const total = files.length;
+
+      for (let i = 0; i < total; i++) {
+        const file = files[i];
+        label.textContent = `Lädt hoch: ${file.name} (${i+1}/${total})`;
+        bar.style.width   = `${Math.round(i/total*100)}%`;
+        const fd = new FormData();
+        fd.append('photo', file);
+        try {
+          const r = await authFetch('/api/photos', { method:'POST', body:fd });
+          r.ok ? ok++ : fail++;
+        } catch { fail++; }
       }
-    } catch(e) {
-      alert("Verbindungsfehler");
+      bar.style.width   = '100%';
+      label.textContent = `✓ ${ok} hochgeladen${fail?`, ${fail} fehlgeschlagen`:''}`;
+      setTimeout(async () => {
+        closeModal('uploadModal');
+        prog.classList.remove('show');
+        await Promise.all([loadGallery(), loadFilters()]);
+        if (ok)   toast('success', `${ok} Foto${ok!==1?'s':''} hochgeladen!`);
+        if (fail) toast('error',   `${fail} Foto${fail!==1?'s':''} konnten nicht hochgeladen werden.`);
+      }, 1600);
     }
-  }
-</script>
+
+    // ── Multi-Select ──────────────────────────────────────────────────────
+    function toggleSelect(id) {
+      selectedIds.has(id) ? selectedIds.delete(id) : selectedIds.add(id);
+      const card    = document.querySelector(`.photo-card[data-id="${id}"]`);
+      const isNow   = selectedIds.has(id);
+      if (card) {
+        card.classList.toggle('selected', isNow);
+        const btn = card.querySelector('.btn-ov-select');
+        if (btn) btn.classList.toggle('active', isNow);
+      }
+      updateBulkBar();
+    }
+    function clearSelection() {
+      selectedIds.clear();
+      document.querySelectorAll('.photo-card.selected').forEach(c => {
+        c.classList.remove('selected');
+        c.querySelector('.btn-ov-select')?.classList.remove('active');
+      });
+      updateBulkBar();
+    }
+    function updateBulkBar() {
+      const n = selectedIds.size;
+      document.getElementById('selCount').textContent = n;
+      document.getElementById('bulkBar').classList.toggle('visible', n > 0);
+    }
+
+    // ── Download ZIP ──────────────────────────────────────────────────────
+    async function downloadSelected() {
+      if (!currentUser) { openModal('loginModal'); return; }
+      if (!selectedIds.size) { toast('info','Keine Fotos ausgewählt.'); return; }
+      toast('info','ZIP wird erstellt…');
+      try {
+        const r = await authFetch('/api/download', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ ids:[...selectedIds] })
+        });
+        if (!r.ok) throw new Error(`${r.status}`);
+        const blob = await r.blob();
+        const url  = URL.createObjectURL(blob);
+        const a    = Object.assign(document.createElement('a'), { href:url, download:'kvp-portfolio.zip' });
+        a.click();
+        URL.revokeObjectURL(url);
+        toast('success', `ZIP mit ${selectedIds.size} Foto(s) heruntergeladen!`);
+      } catch(e) { toast('error','ZIP-Download fehlgeschlagen: '+e.message); }
+    }
+
+    // ── Bulk Delete ───────────────────────────────────────────────────────
+    async function bulkDelete() {
+      if (currentUser?.role !== 'admin') return;
+      if (!selectedIds.size) { toast('info','Keine Fotos ausgewählt.'); return; }
+      if (!confirm(`Wirklich ${selectedIds.size} Foto(s) unwiderruflich löschen?`)) return;
+      try {
+        const r    = await authFetch('/api/photos/bulk-delete', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ ids:[...selectedIds] })
+        });
+        const data = await r.json();
+        const ok   = (data.deleted||[]).length;
+        const fail = (data.errors||[]).length;
+        clearSelection();
+        await loadGallery();
+        if (ok)   toast('success', `${ok} Foto(s) gelöscht.`);
+        if (fail) toast('error',   `${fail} konnten nicht gelöscht werden.`);
+      } catch(e) { toast('error','Löschen fehlgeschlagen.'); }
+    }
+
+    // ── Einzeln löschen ───────────────────────────────────────────────────
+    async function deleteSingle(id) {
+      if (currentUser?.role !== 'admin') return;
+      if (!confirm('Dieses Foto wirklich löschen?')) return;
+      try {
+        const r = await authFetch(`/api/photos/${id}`, { method:'DELETE' });
+        if (r.ok) { selectedIds.delete(id); await loadGallery(); toast('success','Foto gelöscht.'); }
+        else { const d = await r.json().catch(()=>({})); toast('error', d.error||'Löschen fehlgeschlagen.'); }
+      } catch { toast('error','Netzwerkfehler.'); }
+    }
+
+    // ── Favoriten ─────────────────────────────────────────────────────────
+    async function toggleFav(id, btn) {
+      if (!currentUser) { openModal('loginModal'); return; }
+      try {
+        const r    = await authFetch(`/api/photos/${id}/favorite`, { method:'PATCH' });
+        const data = await r.json();
+        if (!r.ok) { toast('error','Favorit konnte nicht gesetzt werden.'); return; }
+        // Lokalen State aktualisieren
+        const p = allPhotos.find(p => p.id === id);
+        if (p) p.is_favorite = data.is_favorite;
+        // Button sofort updaten
+        if (btn) {
+          btn.classList.toggle('active', data.is_favorite);
+          const svg = btn.querySelector('svg');
+          if (svg) svg.setAttribute('fill', data.is_favorite ? 'currentColor' : 'none');
+        }
+        // Wenn Favoriten-Filter aktiv → Galerie neu laden
+        if (favOnly) await loadGallery();
+      } catch { toast('error','Netzwerkfehler.'); }
+    }
+
+    // ── Lightbox ──────────────────────────────────────────────────────────
+    function openLightbox(idx) {
+      if (!allPhotos.length) return;
+      lbIndex = idx;
+      renderLightbox();
+      document.getElementById('lightbox').classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeLightbox() {
+      document.getElementById('lightbox').classList.remove('open');
+      document.body.style.overflow = '';
+    }
+    function lbNav(dir) {
+      lbIndex = (lbIndex + dir + allPhotos.length) % allPhotos.length;
+      renderLightbox();
+    }
+    function renderLightbox() {
+      const p = allPhotos[lbIndex];
+      if (!p) return;
+      const img = document.getElementById('lbImg');
+      img.src = API_URL + '/api/photos/' + p.id + '/image';
+      img.alt = p.filename;
+      const loc = [p.city, p.country].filter(Boolean).join(', ');
+      const parts = [];
+      if (loc)      parts.push('📍 ' + loc);
+      if (p.device) parts.push('📷 ' + p.device);
+      document.getElementById('lbMeta').innerHTML =
+        `<h3>${esc(p.filename)}</h3>${parts.length?`<p>${esc(parts.join(' · '))}</p>`:''}`;
+      document.getElementById('lbCounter').textContent = `${lbIndex+1} / ${allPhotos.length}`;
+    }
+
+    // ── Admin Panel ───────────────────────────────────────────────────────
+    async function toggleAdminPanel() {
+      adminOpen = !adminOpen;
+      document.getElementById('adminSection').classList.toggle('show', adminOpen);
+      if (adminOpen) { await loadUsers(); document.getElementById('adminSection').scrollIntoView({behavior:'smooth'}); }
+    }
+    async function loadUsers() {
+      if (currentUser?.role !== 'admin') return;
+      try {
+        const r     = await authFetch('/api/users');
+        if (!r.ok) return;
+        const users = await r.json();
+        const roleClass = { admin:'badge-admin', user:'badge-user', viewer:'badge-viewer' };
+        document.getElementById('userTableBody').innerHTML = users.map(u => `
+          <tr>
+            <td style="color:var(--text-dim)">#${u.id}</td>
+            <td style="color:var(--text);font-weight:500">${esc(u.username)}</td>
+            <td>${esc(u.display_name||'–')}</td>
+            <td><span class="badge-role ${roleClass[u.role]||'badge-viewer'}">${u.role}</span></td>
+            <td>${u.created_at?u.created_at.slice(0,10):'–'}</td>
+            <td>${u.id!==currentUser.id
+              ? `<button class="btn btn-ghost" style="padding:5px 10px;font-size:11px"
+                         onclick="deleteUser(${u.id},'${esc(u.username)}')">Löschen</button>`
+              : '<span style="color:var(--text-dim);font-size:12px">— Du</span>'}</td>
+          </tr>`).join('');
+      } catch(e) { toast('error','Benutzer konnten nicht geladen werden.'); }
+    }
+    async function createUser() {
+      const un  = document.getElementById('newUsername').value.trim();
+      const pw  = document.getElementById('newPassword').value;
+      const dn  = document.getElementById('newDisplayName').value.trim();
+      const rol = document.getElementById('newRole').value;
+      if (!un||!pw)    { toast('error','Benutzername und Passwort erforderlich.'); return; }
+      if (pw.length<6) { toast('error','Passwort mind. 6 Zeichen.'); return; }
+      try {
+        const r = await authFetch('/api/users', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ username:un, password:pw, role:rol, display_name:dn||un })
+        });
+        const d = await r.json();
+        if (r.ok) {
+          ['newUsername','newPassword','newDisplayName'].forEach(id=>document.getElementById(id).value='');
+          document.getElementById('newRole').value = 'viewer';
+          await loadUsers();
+          toast('success', `Benutzer "${un}" angelegt.`);
+        } else { toast('error', d.error||'Fehler beim Anlegen.'); }
+      } catch { toast('error','Netzwerkfehler.'); }
+    }
+    async function deleteUser(id, un) {
+      if (!confirm(`Benutzer "${un}" wirklich löschen?`)) return;
+      try {
+        const r = await authFetch(`/api/users/${id}`, {method:'DELETE'});
+        if (r.ok) { await loadUsers(); toast('success',`Benutzer "${un}" gelöscht.`); }
+        else { const d=await r.json().catch(()=>({})); toast('error',d.error||'Fehler.'); }
+      } catch { toast('error','Netzwerkfehler.'); }
+    }
+
+    // ── Modal Helpers ─────────────────────────────────────────────────────
+    function openModal(id)  { document.getElementById(id).classList.add('open'); }
+    function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+    function modalBgClick(e, id) { if (e.target.id===id) closeModal(id); }
+
+    // ── Toast ─────────────────────────────────────────────────────────────
+    function toast(type, msg) {
+      const wrap  = document.getElementById('toastWrap');
+      const el    = document.createElement('div');
+      el.className = `toast toast-${type}`;
+      el.textContent = msg;
+      wrap.appendChild(el);
+      requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('show')));
+      setTimeout(() => { el.classList.remove('show'); setTimeout(()=>el.remove(),400); }, 3500);
+    }
+
+    // ── Keyboard ──────────────────────────────────────────────────────────
+    function initKeyboard() {
+      document.addEventListener('keydown', e => {
+        const lb = document.getElementById('lightbox');
+        if (lb.classList.contains('open')) {
+          if (e.key==='Escape')     closeLightbox();
+          if (e.key==='ArrowLeft')  lbNav(-1);
+          if (e.key==='ArrowRight') lbNav(1);
+          return;
+        }
+        if (e.key==='Escape') {
+          document.querySelectorAll('.modal-overlay.open').forEach(m=>m.classList.remove('open'));
+          clearSelection();
+        }
+      });
+    }
+
+    // ── HTML-Escape (XSS-Schutz) ──────────────────────────────────────────
+    function esc(s) {
+      return String(s||'')
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+  </script>
 </body>
 </html>

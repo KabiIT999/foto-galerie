@@ -45,6 +45,7 @@ CREATE TABLE photos (
     camera_model VARCHAR(100),                               -- EXIF Model
     uploaded_by  INTEGER REFERENCES users(id)                -- Wer hat hochgeladen?
                  ON DELETE SET NULL,
+    is_favorite  BOOLEAN   DEFAULT FALSE,                    -- Favoriten-Markierung (per Herz-Button)
     created_at   TIMESTAMP DEFAULT NOW()
 );
 
